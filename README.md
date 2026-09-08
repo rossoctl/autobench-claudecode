@@ -118,6 +118,25 @@ Two subtleties learned the hard way:
   112k–192k cache reads, i.e. 79–97% of prompt tokens. Reporting "input tokens" alone for
   this workload is meaningless.
 
+### Report tokens per LLM call, not just totals
+
+A skill's token cost is a property of **skill × task**, not of the skill. Measured across
+both surviving tasks with the *same* `xlsx` skill:
+
+| task | tokens/call OFF → ON | llm calls OFF → ON | total |
+|---|---|---|---|
+| `xlsx-fin-colors` | 33,568 → 36,977 (**+3,409**) | 5 → 5 (+0%) | **+10%** |
+| `xlsx-fin-font-clean` | 33,482 → 36,805 (**+3,323**) | 5 → **10** (+100%) | **+120%** |
+
+The per-call increase is a near-constant ~3.3–3.4k, matching the injected `SKILL.md`
+(~2,865 tokens). The entire difference between +10% and +120% is **call count** — the skill
+made the agent do twice as much work on one task and no extra work on the other.
+
+So a bigger skill bundle is *not* inherently more expensive: only 1 of 6 skill-on runs read
+anything from the skill's 54-file `scripts/` directory. Compare **tokens per call** to see
+the skill text, and **call count** to see the behavioural cost. Comparing raw totals across
+skills measures task shape instead.
+
 ## Security
 
 `out/` is gitignored and must stay that way. The Cortex session API is **unauthenticated**
