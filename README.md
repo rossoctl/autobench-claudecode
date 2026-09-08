@@ -70,11 +70,14 @@ or rewriting it to assert the buggy behaviour, also makes `pytest` green.
 
 **2. A skill task must be pre-screened on the OFF arm, and discarded if it passes.** A task
 the agent already passes *without* the skill is not measuring the skill. This is not
-hypothetical: **9 of the first 11 tasks written have been discarded**, 2 of the first 5 xlsx
-ones — `claude-sonnet-4-6` already
-writes `=prev*(1+$cell)` instead of hardcoding a growth rate, and already applies
-`$#,##0`/`0.0%`/`0.0x` unprompted. They are kept in `tasks-retired/` with the reason, because
-a discarded task is a result. Run `sweep.py --arm off` before ever believing an ON arm.
+hypothetical: **9 of the first 11 tasks written have been discarded this way.**
+`claude-sonnet-4-6` already writes `=prev*(1+$cell)` instead of hardcoding a growth rate,
+already applies `$#,##0`/`0.0%`/`0.0x` unprompted, and already builds real bulleted lists
+and a sensible slide size hierarchy.
+
+Discarded tasks are kept in `tasks-retired/` with the reason recorded, because **a discarded
+task is a result** — it tells you where the model is already competent. Run
+`sweep.py --arm off` before ever believing an ON arm.
 
 ### Pick arbitrary conventions, not good practice
 
