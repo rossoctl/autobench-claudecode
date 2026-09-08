@@ -1,0 +1,4 @@
+# Verdict-side dependencies. The agent under test also gets this venv on its PATH, so
+# anything a task's verdict needs to assert must be importable here too.
+pytest>=8
+openpyxl>=3.1

@@ -1,0 +1,20 @@
+# Run output. NEVER commit this: out/events/stream.sse is the raw Cortex SSE capture,
+# which contains inference.messages -- i.e. full system prompts and user content -- and
+# out/runs/*.ndjson carries per-run measurements plus local temp paths.
+out/
+
+# Local virtualenv used for verdict commands and for the agent's own python.
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Spreadsheets produced by a task run; artifacts, never inputs.
+*.xlsx
+~$*
+
+# macOS
+.DS_Store
