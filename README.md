@@ -70,10 +70,53 @@ or rewriting it to assert the buggy behaviour, also makes `pytest` green.
 
 **2. A skill task must be pre-screened on the OFF arm, and discarded if it passes.** A task
 the agent already passes *without* the skill is not measuring the skill. This is not
-hypothetical: **2 of the first 5 xlsx tasks died this way** — `claude-sonnet-4-6` already
+hypothetical: **9 of the first 11 tasks written have been discarded**, 2 of the first 5 xlsx
+ones — `claude-sonnet-4-6` already
 writes `=prev*(1+$cell)` instead of hardcoding a growth rate, and already applies
 `$#,##0`/`0.0%`/`0.0x` unprompted. They are kept in `tasks-retired/` with the reason, because
 a discarded task is a result. Run `sweep.py --arm off` before ever believing an ON arm.
+
+### Pick arbitrary conventions, not good practice
+
+The single best predictor of whether a compliance task will discriminate: is the rule
+**house-specific and arbitrary**, or is it **objectively better practice**? A capable model
+already does good practice unprompted, so rules of the second kind cannot separate the arms.
+
+Measured across 11 tasks and three skills:
+
+| Skill | Rule kind | Outcome |
+|---|---|---|
+| `xlsx` | investment-banking colour coding (blue = hardcoded input) | **discriminates** 0/3 → 3/3 |
+| `xlsx` | professional font, no formula errors | **discriminates** 0/3 → 3/3 |
+| `xlsx` | `$#,##0` / `0.0%` / `0.0x`; assumptions as cell refs | passes unaided — discarded |
+| `docx` | real bullets, US Letter, DXA table widths | passes unaided — discarded |
+| `pptx` | size hierarchy, non-text-only slides | passes unaided — discarded |
+
+Blue-for-inputs is an arbitrary banking convention with no general-purpose reason to prefer
+it, so the model does not volunteer it. "Use real list numbering instead of typing a bullet
+character" is simply correct, so it does.
+
+A second trap the `docx` rules exposed: they are **path-dependent**. They exist to correct
+footguns in docx-js, the library the skill itself mandates — A4 defaults, percentage table
+widths. The unaided agent reaches for python-docx, whose defaults already satisfy all three,
+so it never meets the footgun. Testing such a rule requires forcing the same library in both
+arms, which is a different experiment.
+
+### Following a skill is not free
+
+Skill-on cost, same tasks, same model:
+
+| Skill | tokens OFF → ON | wall OFF → ON | verdict change |
+|---|---|---|---|
+| `xlsx` | 167k → 185k (+10%) | 82s → 80s | **0/3 → 3/3** |
+| `docx` | 160k → 1.03M (**6.5×**) | 27s → 501s (**18×**) | none (both pass) |
+| `pptx` | 132k → 2.34M (**18×**) | 35s → 393s (**11×**) | none (both pass) |
+
+The docx and pptx skills route through Node toolchains (docx-js, pptxgenjs) with npm
+installs and LibreOffice validation loops. That is a real cost worth knowing about, but it
+says nothing about whether the resulting document is *better* — these verdicts only check
+the rules they check, and both skills' main promise is visual quality, which is deliberately
+outside a programmatic verdict.
 
 ## Isolation, and why it is per-invocation
 

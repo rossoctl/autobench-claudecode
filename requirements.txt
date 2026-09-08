@@ -2,3 +2,5 @@
 # anything a task's verdict needs to assert must be importable here too.
 pytest>=8
 openpyxl>=3.1
+python-docx>=1.1
+python-pptx>=0.6

@@ -1,0 +1,10 @@
+{
+  "skill": "pptx",
+  "skill_marker": "Don't create text-only slides",
+  "allowed_tools_extra": [
+    "Bash(soffice*)",
+    "Bash(ls*)",
+    "Bash(cat*)",
+    "Bash(python*)"
+  ]
+}

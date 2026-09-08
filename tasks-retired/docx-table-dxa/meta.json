@@ -1,0 +1,11 @@
+{
+  "skill": "docx",
+  "skill_marker": "WidthType.PERCENTAGE",
+  "allowed_tools_extra": [
+    "Bash(node*)",
+    "Bash(npm*)",
+    "Bash(soffice*)",
+    "Bash(ls*)",
+    "Bash(cat*)"
+  ]
+}

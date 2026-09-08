@@ -184,7 +184,11 @@ def load_task(task_dir):
             # workspace/ instead, where visibility is correct.
             "verdict": vd if vd.exists() else None,
             "skill": meta.get("skill"),
-            "skill_marker": meta.get("skill_marker")}
+            "skill_marker": meta.get("skill_marker"),
+            # Extra --allowedTools entries this task needs. The docx skill mandates
+            # docx-js (Node), so without Bash(node*)/Bash(npm*) the agent silently falls
+            # back to python-docx and we would be measuring the fallback, not the skill.
+            "allowed_tools_extra": meta.get("allowed_tools_extra") or []}
 
 
 IGNORE = shutil.ignore_patterns("__pycache__", ".pytest_cache", "*.pyc", ".venv", "venv")
@@ -250,7 +254,7 @@ def analyse_transcript(stdout):
 
 # ---------------------------------------------------------------- one repetition
 
-def run_rep(task, rep, cfg_dir, model=DEFAULT_MODEL, arm="on", timeout=900):
+def run_rep(task, rep, cfg_dir, model=DEFAULT_MODEL, arm="on", timeout=1800):
     ws = fresh_ws(task)
     before_tests = test_hashes(ws)
     if task.get("verdict"):
@@ -277,6 +281,8 @@ def run_rep(task, rep, cfg_dir, model=DEFAULT_MODEL, arm="on", timeout=900):
 
     prompt = task["prompt"]
     tools = ALLOWED_TOOLS
+    if task.get("allowed_tools_extra"):
+        tools = tools + " " + " ".join(task["allowed_tools_extra"])
     use_skill = bool(task.get("skill")) and arm == "on"
     if use_skill:
         prompt = f"/{task['skill']} " + prompt
@@ -310,7 +316,12 @@ def run_rep(task, rep, cfg_dir, model=DEFAULT_MODEL, arm="on", timeout=900):
         # Arrives only now, so it cannot be read or tampered with by the agent.
         for item in task["verdict"].iterdir():
             shutil.copy2(item, pathlib.Path(ws) / item.name)
-    rc1, tail1, _ = pytest_run(ws)
+    rc1, tail1, out1 = pytest_run(ws)
+    # "no artifact produced" is NOT the same failure as "artifact is non-compliant".
+    # The first means the agent could not do the work at all -- e.g. its skill mandates a
+    # Node library and Bash(node*) was not in the allow-list, which is a harness fault and
+    # must never be scored as a compliance result.
+    no_artifact = "produced" in out1 and "no " in out1.lower() and rc1 != 0
     passed = (rc1 == 0) and tests_untouched
 
     # Cortex correlation: response-phase events to the target host inside [t0,t1].
@@ -366,6 +377,8 @@ def run_rep(task, rep, cfg_dir, model=DEFAULT_MODEL, arm="on", timeout=900):
         confounds.append("bad_baseline")
     if not resp:
         confounds.append("no_cortex_inference_events")
+    if no_artifact:
+        confounds.append("no_artifact_produced")
     if len(models) > 1:
         confounds.append(f"multiple_models:{models}")
     # Trust the wire, not the flag: confirm the requested model is what was actually
@@ -380,6 +393,7 @@ def run_rep(task, rep, cfg_dir, model=DEFAULT_MODEL, arm="on", timeout=900):
         "passed": passed, "pytest_rc": rc1, "pytest_tail": tail1,
         "baseline_ok": baseline_ok, "baseline_tail": tail0,
         "hidden_verdict": bool(task.get("verdict")),
+        "no_artifact_produced": no_artifact,
         "tests_untouched": tests_untouched,
         "child_exit": r.returncode, "timed_out": timed_out,
         "wall_seconds": round(wall, 1),
@@ -387,7 +401,8 @@ def run_rep(task, rep, cfg_dir, model=DEFAULT_MODEL, arm="on", timeout=900):
         "tool_calls": len(tr["tools"]),
         "tool_histogram": {t: tr["tools"].count(t) for t in sorted(set(tr["tools"]))},
         "skills_invoked": tr["skills"], "subagents_invoked": tr["subagents"],
-        "arm": arm, "expected_skill": task.get("skill") if use_skill else None,
+        "arm": arm, "allowed_tools": tools,
+        "expected_skill": task.get("skill") if use_skill else None,
         "skill_on_wire": skill_on_wire,
         "llm_calls": len(resp), "cortex_tunnels": len(tunnels),
         "model_requested": model,
