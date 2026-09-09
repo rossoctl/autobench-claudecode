@@ -219,6 +219,17 @@ already passes *without* the skill is not measuring the skill.
 Left visible in `workspace/`, the agent reads it and complies — so both arms pass and the task
 measures "can you read a test". Hidden verdicts are installed only *after* the child exits.
 
+### The verdict files actually used
+
+| Task | Verdict file | Visible to the agent? | What it asserts |
+|---|---|---|---|
+| `cortex-pyfix-001` | `workspace/test_billing.py` | **Yes** — the tests *are* the spec | 6 tests over two seeded bugs (a percentage treated as a fraction; a dropped remainder in an even split) |
+| `xlsx-fin-colors` | `verdict/test_compliance.py` | **No** — installed after the agent exits | 2 tests: hardcoded numeric inputs are blue-font; formula cells are not blue |
+| `xlsx-fin-font-clean` | `verdict/test_compliance.py` | **No** | 3 tests: one consistent professional font; no `#REF!`/`#DIV/0!`-class literals; the saving and ratio are formulas, not typed values |
+
+All are plain `pytest`, run by the repo's `.venv` interpreter. The pass condition is exit 0
+**and** every `test_*.py` byte-identical to what shipped.
+
 ### Why tasks were discarded — the reusable heuristic
 
 **A compliance rule discriminates only when it is arbitrary and house-specific, not when it
@@ -415,10 +426,23 @@ correct (fired nothing 3/3, so no over-eagerness).
 `xlsx-fin-font-clean`, 30% on the no-skill canary — *despite being less token-efficient*. Its
 2/3 unit price more than absorbs the 1.23× per-call context.
 
-**Use `claude-haiku-4-5` where a retry is acceptable.** Most cost-efficient in every cell by
-2–4× and fastest (14–39 s vs 59–78 s). But it passed the harder compliance task only **40%**
-of the time *with the skill supplied*, so it is unsuitable where first-attempt correctness
-matters. Its economics survive its failures on these tasks; that will not hold as tasks harden.
+**Use `claude-haiku-4-5` only behind a validator.** Most cost-efficient in every cell by 2–4×
+and fastest (14–39 s vs 59–78 s). But it passed the harder compliance task only **40%** of the
+time *with the skill supplied*. What it actually got wrong, across the three failures:
+
+| Rep | Failure | Detectable by eye? |
+|---|---|---|
+| 3 | mixed fonts — `['calibri', 'cambria']` | maybe, on close inspection |
+| 4 | mixed fonts — `['arial', 'calibri']` | maybe |
+| 5 | **hardcoded the values instead of using formulas** (0 formulas where ≥2 required) | **no — the numbers are correct** |
+
+That third one is the reason "retries are acceptable" is too casual a condition. A hardcoded
+spreadsheet *looks* right and reports the right figures; it breaks silently the first time an
+input changes. So the precondition is not tolerance of retries but **the ability to detect the
+failure programmatically** — the same verdict the benchmark uses. Without a validator in the
+pipeline you do not get retries, you get silent defects. With one, haiku's economics survive
+its failures on these tasks (cost per *solved* task already charges for them); that will not
+hold as tasks harden.
 
 **Do not default to `claude-opus-5` where the bill is the constraint.** Least cost-efficient
 in all three cells (1.6–2.1× `sonnet-5`) with no pass-rate advantage. But note the measure

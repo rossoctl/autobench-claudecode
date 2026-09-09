@@ -111,6 +111,9 @@ def table(slide, rows, l, t, w, col_w, size=13, header=True, highlight=None):
                 r.font.bold = (header and i == 0)
                 r.font.color.rgb = (RGBColor(0xFF, 0xFF, 0xFF) if header and i == 0
                                     else (highlight or {}).get((i, j), BODY))
+    # bottom edge in inches, so a caller never has to hardcode it -- adding rows to the
+    # terms table silently pushed it over the footnote once already.
+    shp._bottom_in = t + 0.32 * nrows
     return shp
 
 
@@ -271,9 +274,9 @@ rows = [["term", "meaning"],
         ["Token-efficiency", "tokens consumed per SOLVED task — what the context window and rate limits see"],
         ["Cost-efficiency", "dollars per SOLVED task — token-efficiency weighted by that model's unit price"],
         ["Cost per solved task", "median ÷ pass rate, so a model is charged for its failures"]]
-table(s, rows, 0.7, 2.4, 11.9, [2.6, 9.3], size=11.5)
+_tbl = table(s, rows, 0.7, 2.4, 11.9, [2.6, 9.3], size=11.5)
 tb(s, "‘workload-harness’ (hyphenated) is a proper noun for an unrelated upstream project — never used here as a common noun.",
-   0.7, 5.35, 11.9, 0.3, 12, color=MUTED)
+   0.7, _tbl._bottom_in + 0.15, 11.9, 0.3, 12, color=MUTED)
 
 # ─────────────────────────────────────────────────────────── 5. setup diagram
 s = prs.slides.add_slide(BLANK); bg(s, PAPER)
@@ -391,21 +394,22 @@ slide_title(s, "Two factors drive token cost", "finding 2 · decomposition")
 box(s, "tokens per task   =   tokens per LLM CALL   ×   LLM calls per task\n"
       "                              (a MODEL property)              (a TASK property)",
     0.7, 1.88, 11.7, 0.78, fill=RGBColor(0xFF, 0xFF, 0xFF), size=15, bold=True, color=INK)
-tb(s, "Factor 1 — tokens per LLM call: ratio vs sonnet-4-6, across five structurally different cells",
-   0.7, 2.8, 11.9, 0.3, 14, color=MUTED)
-rows = [["model", "range", "spread", "reading"],
+tb(s, "Factor 1 — tokens per LLM call: ratio vs sonnet-4-6, across five structurally different cells.\n"
+      "“spread” = highest ratio minus lowest. Small spread means the ratio is a property of the MODEL, not of the task\n"
+      "(≤0.15 is reported as CONSTANT).",
+   0.7, 2.72, 11.9, 0.8, 12.5, color=MUTED, spacing=1)
+rows = [["model", "range across the 5 cells", "spread", "reading"],
         ["haiku-4-5", "0.97 – 1.05", "0.07", "≈ same context per LLM call"],
         ["sonnet-5", "1.19 – 1.30", "0.11", "≈1.23× more per LLM call"],
         ["opus-5", "0.89 – 0.97", "0.08", "≈0.90× — leaner per LLM call"]]
-table(s, rows, 0.7, 3.2, 11.9, [2.4, 2.6, 1.7, 5.2], size=14, highlight={(3, 3): GOOD})
+table(s, rows, 0.7, 3.62, 11.9, [2.4, 2.6, 1.7, 5.2], size=14, highlight={(3, 3): GOOD})
 tb(s, "Factor 2 — LLM calls per task: NOT constant. 0.40–1.00× for haiku, 0.83–2.00× for opus-5, by task.",
-   0.7, 4.7, 11.9, 0.35, 15, color=WARN, bold=True)
-box(s, "One TASK is one `claude -p` run and makes SEVERAL LLM calls (5–24 observed), each re-sending the\n"
-      "growing conversation. A model has a stable appetite per LLM call — how many calls the job needs is a\n"
-      "separate matter. A raw token total multiplies the two and hides both.",
-    0.7, 5.12, 11.7, 0.95, fill=RGBColor(0xFF, 0xFF, 0xFF), size=13, bold=True, color=INK)
-tb(s, "Cache reads are 81–97% of prompt tokens in every cell — highest on sonnet-5 and opus-5. Reporting\n"
-      "“input tokens” alone for this workload is meaningless.", 0.7, 6.15, 11.9, 0.6, 13, color=MUTED)
+   0.7, 5.05, 11.9, 0.35, 15, color=WARN, bold=True)
+box(s, "One TASK is one `claude -p` run making SEVERAL LLM calls (5–24), each re-sending the growing conversation.\n"
+      "A raw token total multiplies the two factors and hides both.",
+    0.7, 5.45, 11.7, 0.75, fill=RGBColor(0xFF, 0xFF, 0xFF), size=12.5, bold=True, color=INK)
+tb(s, "That re-sending is also why cache reads are 81–97% of prompt tokens in every cell.",
+   0.7, 6.4, 11.9, 0.3, 12, color=MUTED)
 
 # ─────────────────────────────────────────────────────────── 11. finding: money
 s = prs.slides.add_slide(BLANK); bg(s, PAPER)
@@ -511,9 +515,9 @@ box(s, "ADOPT AS DEFAULT\n\nclaude-sonnet-5\n\n100% pass on every task, and chea
       "than sonnet-4-6 in 2 of 3 cells — 29%\non font-clean, 30% on the canary —\n"
       "despite using MORE tokens.\n2/3 unit price absorbs 1.23×/call.",
     0.7, 2.0, 3.7, 2.85, fill=RGBColor(0xFF, 0xFF, 0xFF), size=12, color=BODY)
-box(s, "USE WHERE RETRIES ARE OK\n\nclaude-haiku-4-5\n\nCheapest in every cell by 2–4×\nand fastest (14–39s vs 59–78s).\n"
-      "But passed the harder task only\n40% of the time WITH the skill.\nNot for first-attempt correctness.",
-    4.8, 2.0, 3.7, 2.85, fill=RGBColor(0xFF, 0xFF, 0xFF), size=12, color=BODY)
+box(s, "ONLY WITH A VALIDATOR\n\nclaude-haiku-4-5\n\nMost cost-efficient everywhere by\n2–4×, and fastest. But it failed\n"
+      "3 of 5 WITH the skill supplied —\nand one failure hardcoded values\ninstead of formulas, which LOOKS\ncorrect. Retry only works if you\ncan detect the failure.",
+    4.8, 2.0, 3.7, 2.85, fill=RGBColor(0xFF, 0xFF, 0xFF), size=11.5, color=BODY)
 box(s, "NOT INDICATED HERE\n\nclaude-opus-5\n\nMost expensive in all three cells\n(1.6–2.1× sonnet-5), no pass-rate\n"
       "advantage. Genuinely the most\ntoken-efficient and the only model\nto solve a task unaided — may earn\nits premium on harder work.",
     8.9, 2.0, 3.7, 2.85, fill=RGBColor(0xFF, 0xFF, 0xFF), size=12, color=BODY)
