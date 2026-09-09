@@ -352,7 +352,7 @@ inverted**:
 single number and calling it "efficiency" picks the answer by accident. Where the two are
 reported together in this document, the measure is always named.
 
-### 7.5 Downstream LLM calls: counted, but not attributable
+### 7.5 A subagent's calls land in the totals — and can't be separated out
 
 An LLM call can trigger further LLM calls — a subagent (`Agent`) runs its own agent loop, and
 background tasks run asynchronously. **Cortex counts all of them**: the child's `HTTPS_PROXY`

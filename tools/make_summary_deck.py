@@ -177,7 +177,7 @@ SECTIONS = [
         ("12", "Two factors drive token cost"),
         ("13", "Money reverses the token conclusion"),
         ("14", "Token-efficiency is not cost-efficiency"),
-        ("15", "Downstream calls are counted, not attributed"),
+        ("15", "A subagent's calls land in the totals"),
         ("16", "Skill cost is a property of skill × model"),
         ("17", "Skill selection is reliable"),
     ]),
@@ -488,28 +488,28 @@ box(s, "opus-5 is the MOST token-efficient and the LEAST cost-efficient model te
 
 # ────────────────────────────────────── 15. downstream LLM calls
 s = prs.slides.add_slide(BLANK); bg(s, PAPER)
-slide_title(s, "Downstream calls are counted, not attributed", "finding 5 · measurement integrity")
-tb(s, "An LLM call can trigger more LLM calls: a subagent runs its own agent loop. Cortex counts them, because the\n"
-      "child's HTTPS_PROXY is inherited by its subprocesses — that traffic crosses the same proxy into the window.",
-   0.7, 1.95, 11.9, 0.6, 14, color=BODY)
+slide_title(s, "A subagent's calls land in the totals — and can't be separated out",
+            "finding 5 · measurement integrity")
+tb(s, "The child's HTTPS_PROXY is inherited by its subprocesses, so a subagent's traffic crosses the same proxy.",
+   0.7, 2.28, 11.9, 0.3, 14, color=BODY)
 rows = [["measure", "effect of downstream work"],
         ["total tokens / dollars", "CORRECT — the calls really happened and are really billed"],
         ["tokens per LLM call", "unaffected — still that model's per-call average"],
         ["LLM calls per task", "INFLATED — the “task” is no longer a single agent loop"],
         ["any skill-overhead ratio", "INVALID — it compares two different amounts of work"]]
-table(s, rows, 0.7, 2.7, 11.9, [3.4, 8.5], size=13,
+table(s, rows, 0.7, 2.65, 11.9, [3.4, 8.5], size=13,
       highlight={(1, 1): GOOD, (3, 1): WARN, (4, 1): WARN})
 tb(s, "Magnitude where it occurred — affected repetitions vs others in the same cell:",
-   0.7, 4.35, 11.9, 0.3, 13, color=MUTED)
+   0.7, 4.32, 11.9, 0.3, 13, color=MUTED)
 rows2 = [["cell", "with downstream", "without"],
          ["pptx-body-left-aligned ON", "26 calls / 1,255,632 tok", "10 calls / 458,514 tok"],
          ["pptx-size-contrast ON", "36 calls / 1,908,134 tok", "10 calls / 491,474 tok"],
          ["select-deck SELECT", "46 calls / 2,485,834 tok", "7 calls / 302,900 tok"]]
-table(s, rows2, 0.7, 4.75, 11.9, [4.3, 3.8, 3.8], size=12)
+table(s, rows2, 0.7, 4.68, 11.9, [4.3, 3.8, 3.8], size=12)
 box(s, "2.7×–8.2×. The detector that should have flagged these matched a tool named `Task`, but this build names it\n"
       "`Agent` — so it never fired and 5 repetitions passed as clean. Fixed and unit-tested. The xlsx COST PROFILE\n"
       "is unaffected: none of the 5 fall in its 20 cells.",
-    0.7, 6.05, 11.2, 0.95, fill=INK, color=RGBColor(0xFF, 0xFF, 0xFF), size=12.5, bold=True)
+    0.7, 6.0, 11.2, 0.9, fill=INK, color=RGBColor(0xFF, 0xFF, 0xFF), size=12.5, bold=True)
 
 # ──────────────────────── 16. finding: skill overhead
 s = prs.slides.add_slide(BLANK); bg(s, PAPER)
