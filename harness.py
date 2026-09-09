@@ -466,8 +466,14 @@ def run_rep(task, rep, cfg_dir, model=DEFAULT_MODEL, arm="on", timeout=1800):
             confounds.append(f"foreign_skill_invoked:{foreign}")
     if tr["subagents"]:
         confounds.append(f"subagent_invoked:{tr['subagents']}")
-    if tr.get("background"):
-        confounds.append(f"background_task_used:{sorted(set(tr['background']))}")
+    # NOTE: background tools (TaskOutput/TaskStop) are recorded in `background_tools` but
+    # are deliberately NOT a confound. A background task here is a background SHELL command;
+    # it issues no LLM calls of its own, so every token still belongs to the one agent loop
+    # we are measuring. Treating it as a confound was wrong twice over: mechanically, and
+    # empirically -- in both pptx cells the single most expensive repetition carries NO
+    # background tool (28 calls/1.32M vs 27 flagged; 39 vs 47 flagged), so the flag marks a
+    # SUBSET of a bimodal cost mode. Excluding on it therefore biases the median instead of
+    # cleaning it, which is how the published pptx overhead came to be quoted as 3.0x.
     if task.get("skill_marker") and not selection:
         if arm == "on" and skill_on_wire is False:
             confounds.append("expected_skill_not_on_wire")

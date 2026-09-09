@@ -363,11 +363,15 @@ reported together in this document, the measure is always named.
 
 ### 7.5 A subagent's calls land in the totals — and can't be separated out
 
-An LLM call can trigger further LLM calls — a subagent (`Agent`) runs its own agent loop, and
-background tasks run asynchronously. **Cortex counts all of them**: the child's `HTTPS_PROXY`
-is inherited by its subprocesses, so a subagent's traffic crosses the same proxy and lands in
-the measurement window as ordinary response events. For cost that is correct — those calls
-are real and billed.
+An LLM call can trigger further LLM calls: a subagent (`Agent`) runs its own agent loop.
+**Cortex counts those**: the child's `HTTPS_PROXY` is inherited by its subprocesses, so a
+subagent's traffic crosses the same proxy and lands in the measurement window as ordinary
+response events. For cost that is correct — those calls are real and billed.
+
+A **background task** (`TaskOutput`/`TaskStop`) is not the same thing and issues no LLM calls of
+its own: it is an asynchronous *shell* command whose output the main loop reads later. Its
+tokens are the main loop's. The distinction matters because conflating the two produced a
+6-fold error in a published figure, corrected below.
 
 **They are not attributable, though.** On the wire a subagent's call looks exactly like the
 main loop's, so:
@@ -379,24 +383,50 @@ main loop's, so:
 | LLM calls per task | **inflated** — the "task" is no longer a single agent loop |
 | skill-overhead ratios | **invalid** — compares two different amounts of work |
 
-Measured impact, comparing affected repetitions against others in the same cell:
+Measured impact of a **genuine subagent spawn**, against the other repetitions of its cell:
 
-| Cell | with downstream work | without |
+| Cell | with a subagent | without |
 |---|---|---|
-| `pptx-body-left-aligned` ON | 26 calls / 1,255,632 tok | 10 calls / 458,514 tok |
-| `pptx-size-contrast` ON | 36 calls / 1,908,134 tok | 10 calls / 491,474 tok |
-| `select-deck` SELECT | 46 calls / 2,485,834 tok | 7 calls / 302,900 tok |
+| `select-deck` SELECT | 46 calls / 2,485,834 tok (`Agent`×2) | 7, 7 calls / 0.31M, 0.29M tok |
 
-That is **2.7×–8.2×**, which is why these repetitions must be flagged rather than averaged in.
+That is **6.6×**, which is why such a repetition must be flagged rather than averaged in. It is
+the only one in the dataset.
 
-**This detector was broken until 2026-09-09.** It matched a tool named `Task`, but this Claude
-Code build names the subagent tool `Agent`, so five affected repetitions were reported as
-clean. Now matches both, plus `TaskOutput`/`TaskStop` for background work, and is unit-tested.
-One published figure was wrong as a result: `pptx` skill overhead was stated as 18×, from a
-median including two contaminated repetitions; excluding them it is **3.0×**.
+An earlier version of this table also listed two `pptx` repetitions at 2.7×–8.2×. They are not
+in fact contaminated — they used a background *shell* task, not a subagent — and the table
+overstated the case by comparing them against a median drawn from the *other* mode of a bimodal
+cell. Both rows are withdrawn; see the correction immediately below.
 
-**The cost profile in §7.1–7.4 is unaffected** — none of the 5 affected repetitions fall in
-its 20 cells. All were in the retired `pptx` tasks and one `select` task.
+**This detector was broken until 2026-09-09, and the first fix over-corrected.** It matched a
+tool named `Task`, but this Claude Code build names the subagent tool `Agent`, so affected
+repetitions were reported as clean. The fix added `Agent` — correct — but also made
+`TaskOutput`/`TaskStop` a confound, which was wrong on both grounds:
+
+- **Mechanically:** a background task here is a background *shell* command. It issues no LLM
+  calls of its own, so every token still belongs to the single agent loop under measurement.
+- **Empirically:** in both `pptx` tasks the single most expensive repetition carries *no*
+  background tool (1,324k tokens unflagged vs 1,278k flagged; 2,541k unflagged vs 1,275k
+  flagged). The flag marked a *subset* of an expensive mode, not its cause, so excluding on it
+  biased the median rather than cleaning it.
+
+Only `Agent`/`Task` remains a confound. Exactly **one** repetition in the dataset qualifies —
+`select-deck` rep 1, at 46 calls / 2,485,834 tokens against 7 / ~0.30M for reps 2–3 of the same
+cell (6.6×). It is excluded per-rep in `results/profile-manifest.json` (`excluded_reps`), which
+keeps its two clean siblings — the very reps that make it legible as contamination.
+
+**The `pptx` overhead figure is withdrawn, not corrected.** It was published as 18×, then as
+3.0×; both were membership artifacts. The ON arm is bimodal — three low and three high
+repetitions per task (207k/254k/663k vs 1,234k/1,278k/1,324k; 364k/380k/603k vs
+1,275k/2,338k/2,541k) — i.e. **≈2.3× in the low mode and ≈7.9× in the high mode** against a
+164k OFF median. The median of six falls in the empty gap between the modes, which is why a
+single membership change could move it 6-fold. At n=6 the mode frequencies are unknown, so no
+point estimate is defensible. These are retired tasks; the fix is more repetitions if the
+number is ever wanted, not a better choice of median.
+
+**The cost profile in §7.1–7.4 is unaffected.** Verified directly rather than assumed: the
+current detector was re-applied to all 160 pinned repetitions, and every hit falls in the
+retired `pptx` tasks or a `select` task — **0 of the 100 cost-grid repetitions**. So every
+model-selection conclusion stands.
 
 ### 7.6 Skill overhead is a property of skill × model
 

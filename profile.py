@@ -124,8 +124,23 @@ def prior_exclusions():
     return {b: "(reason not recorded)" for b in ex} if isinstance(ex, list) else dict(ex)
 
 
-def freeze(exclude=None, keep_prior=True):
+def prior_rep_exclusions():
+    """Per-REP exclusions already in the manifest, keyed "basename#rep"."""
+    if not MANIFEST.exists():
+        return {}
+    return dict(json.loads(MANIFEST.read_text()).get("excluded_reps") or {})
+
+
+def freeze(exclude=None, exclude_reps=None, keep_prior=True):
     """Pin the current membership. Excluded basenames stay on disk but leave the profile.
+
+    Two granularities, because contamination does not respect file boundaries. `exclude`
+    drops a whole run file; `exclude_reps` drops ONE repetition, keyed "basename#rep".
+    The finer one exists because `select-deck-select-...ndjson` holds three reps of which
+    only the first spawned a subagent -- dropping the file would have deleted the two clean
+    7-call reps that make the contaminated 46-call rep visible as contamination at all.
+    Per-rep exclusion also leaves the file's sha256 intact, so integrity checking still
+    covers the bytes we are reading.
 
     Excluding is for reps that are real measurements but belong to a DIFFERENT experiment
     than the published grid -- a pre-grid sweep, a canary, a smoke test. The data is never
@@ -139,8 +154,10 @@ def freeze(exclude=None, keep_prior=True):
     does not silently re-admit them.
     """
     exclude = dict(exclude or {})
+    exclude_reps = dict(exclude_reps or {})
     if keep_prior:
         exclude = {**prior_exclusions(), **exclude}
+        exclude_reps = {**prior_rep_exclusions(), **exclude_reps}
     entries, skipped, empty = [], [], []
     for f in all_run_files():
         base = pathlib.Path(f).name
@@ -161,17 +178,26 @@ def freeze(exclude=None, keep_prior=True):
         {"note": "Exact inputs to the xlsx cost profile. --report reads only these. "
                  "Regenerate with `profile.py --freeze` after a deliberate --run. "
                  "The published grid is flat n=5: 20 cells x 5 reps from one grid run. "
-                 "`excluded` files are real measurements still on disk, left out on "
-                 "purpose -- each with its reason.",
+                 "`excluded` files and `excluded_reps` (keyed basename#rep) are real "
+                 "measurements still on disk, left out on purpose -- each with its reason.",
          "excluded": {b: exclude[b] for b in sorted(skipped)},
+         "excluded_reps": {k: exclude_reps[k] for k in sorted(exclude_reps)},
          "files": entries}, indent=2) + "\n")
     total = sum(e["rows"] for e in entries)
-    print(f"froze {len(entries)} files / {total} reps -> "
-          f"{MANIFEST.relative_to(ROOT)}")
+    dropped = sum(1 for k in exclude_reps
+                  if k.split("#")[0] in {e["file"].split("/")[-1] for e in entries})
+    print(f"froze {len(entries)} files / {total} reps"
+          + (f" ({dropped} single rep(s) excluded within them -> {total - dropped} counted)"
+             if dropped else "")
+          + f" -> {MANIFEST.relative_to(ROOT)}")
     if skipped:
         print(f"excluded {len(skipped)} file(s), still on disk:")
         for b in sorted(skipped):
             print(f"   {b}  -- {exclude[b]}")
+    if exclude_reps:
+        print(f"excluded {len(exclude_reps)} single rep(s), file otherwise kept:")
+        for k in sorted(exclude_reps):
+            print(f"   {k}  -- {exclude_reps[k]}")
     if empty:
         print(f"skipped {len(empty)} zero-row file(s): " + ", ".join(empty))
     return entries
@@ -184,8 +210,10 @@ def load(use_manifest=True):
     are NOT the published ones -- it is printed loudly rather than folded into a footnote.
     """
     problems = []
+    drop_reps = {}
     if use_manifest and MANIFEST.exists():
         man = json.loads(MANIFEST.read_text())
+        drop_reps = dict(man.get("excluded_reps") or {})
         files = []
         for e in man["files"]:
             p = ROOT / e["file"]
@@ -199,6 +227,8 @@ def load(use_manifest=True):
         provenance = (f"frozen manifest: {len(man['files'])} files"
                       + (f", {len(man['excluded'])} deliberately excluded"
                          if man.get("excluded") else "")
+                      + (f", {len(drop_reps)} single rep(s) excluded"
+                         if drop_reps else "")
                       + (f"; {extra} newer run file(s) on disk are NOT included"
                          if extra > 0 else ""))
     else:
@@ -210,11 +240,21 @@ def load(use_manifest=True):
                             "membership is whatever is on disk right now")
 
     by = defaultdict(list)
+    seen_drops = set()
     for f in files:
+        base = pathlib.Path(f).name
         for line in rows_of(f):
             r = json.loads(line)
+            key = f"{base}#{r.get('rep')}"
+            if key in drop_reps:
+                seen_drops.add(key)
+                continue
             by[(r["task_id"], r.get("arm", "on"),
                 r.get("model_requested") or "<unpinned>")].append(r)
+    # A rep exclusion that matched nothing is a silent no-op -- the sort of thing that lets a
+    # renamed file quietly re-admit a contaminated rep. Say so.
+    for key in sorted(set(drop_reps) - seen_drops):
+        problems.append(f"STALE REP EXCLUSION  {key} matched no row in the manifest's files")
     return by, provenance, problems
 
 
@@ -397,6 +437,11 @@ if __name__ == "__main__":
                     help="with --freeze: a run file to leave OUT of the profile "
                          "(repeatable). The file stays on disk. Give a reason after '=' "
                          "-- it is stored in the manifest.")
+    ap.add_argument("--exclude-rep", action="append", default=[],
+                    metavar="BASENAME#REP=REASON",
+                    help="with --freeze: ONE repetition to leave OUT, e.g. "
+                         "'select-deck-...ndjson#1=spawned a subagent'. The rest of the "
+                         "file stays in, and its sha256 stays valid.")
     ap.add_argument("--reset-exclusions", action="store_true",
                     help="with --freeze: do NOT carry forward the manifest's existing "
                          "exclusions (they are kept by default)")
@@ -409,7 +454,13 @@ if __name__ == "__main__":
         for spec in a.exclude:
             base, _, why = spec.partition("=")
             ex[base] = why or "(reason not given)"
-        freeze(ex, keep_prior=not a.reset_exclusions)
+        exr = {}
+        for spec in a.exclude_rep:
+            key, _, why = spec.partition("=")
+            if "#" not in key:
+                ap.error(f"--exclude-rep needs BASENAME#REP, got {key!r}")
+            exr[key] = why or "(reason not given)"
+        freeze(ex, exr, keep_prior=not a.reset_exclusions)
     if a.run:
         run(a.reps)
         print("\nNOTE the manifest is unchanged. To publish these reps, re-pin with:")

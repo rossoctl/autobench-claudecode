@@ -1,11 +1,19 @@
 """Unit tests for the confound detector in `harness.analyse_transcript`.
 
 WHY THIS FILE EXISTS. The subagent detector matched a tool named `Task`, but this Claude
-Code build names the subagent tool `Agent`. It therefore never fired, five repetitions that
-spawned downstream work were scored clean, and a published skill-overhead figure of "18x"
-was really 3.0x once the contaminated reps were dropped. The code was fixed on 2026-09-09
--- and the project memory recorded it as "unit-tested against each", which was not true.
-The fix landed; the test did not. This file is that test.
+Code build names the subagent tool `Agent`. It therefore never fired and repetitions that
+spawned downstream work were scored clean. The code was fixed on 2026-09-09 -- and the
+project memory recorded it as "unit-tested against each", which was not true. The fix
+landed; the test did not. This file is that test.
+
+SECOND CORRECTION, same day. The first fix over-reached: it also made TaskOutput/TaskStop a
+confound, and the "18x -> 3.0x" figure quoted above came from excluding reps on that basis.
+That was wrong. A background task here is a background SHELL command and issues no LLM calls,
+so its tokens still belong to the one loop being measured; and in both pptx cells the single
+most expensive repetition carries no background tool at all, so the flag marked a subset of a
+bimodal cost mode. Excluding on it biased the median rather than cleaning it. Background
+tools are now recorded and NOT counted as a confound -- see `test_background_work_is_recorded_
+but_is_not_a_confound`, which is the guard for that regression.
 
 A detector that has never fired is indistinguishable from a broken one, so every name gets
 a synthetic POSITIVE, and the clean transcript gets a NEGATIVE that must stay quiet.
@@ -14,6 +22,7 @@ The load-bearing test is `test_every_declared_tool_name_has_a_case`: it fails if
 adds a name to `SUBAGENT_TOOLS` or `BACKGROUND_TOOLS` without adding a case here. That is
 the specific failure this file is designed to make impossible to repeat.
 """
+import inspect
 import json
 import pathlib
 import sys
@@ -27,8 +36,9 @@ from harness import analyse_transcript
 
 # Names that must land in the `subagents` bucket: work happening in its own agent loop.
 SUBAGENT_CASES = {"Agent", "Task"}
-# Names that must land in the `background` bucket: not a spawn, but evidence of async work
-# whose LLM calls land in our measurement window without belonging to the main loop.
+# Names that must land in the `background` bucket: not a spawn, and NOT a confound either --
+# a background shell task makes no LLM calls, so the tokens stay attributable. Recorded so a
+# reader can see async work happened; never used to disqualify a repetition.
 BACKGROUND_CASES = {"TaskOutput", "TaskStop"}
 
 
@@ -143,3 +153,22 @@ def test_every_declared_tool_name_has_a_case():
 
 def test_subagent_and_background_buckets_are_disjoint():
     assert not (set(harness.SUBAGENT_TOOLS) & set(harness.BACKGROUND_TOOLS))
+
+
+def test_background_work_is_recorded_but_is_not_a_confound():
+    """Background shell work must never disqualify a repetition.
+
+    The confound list is assembled inside `run_rep`, which shells out to `claude`, so this
+    asserts the policy at the source level rather than mocking a subprocess. Crude, but it
+    pins the exact regression: a `confounds.append(...)` fed from the `background` bucket.
+    Deleting this test to make a change pass is the thing not to do -- excluding reps on this
+    signal is what turned a real 2.3x-9.8x range into a spurious "3.0x".
+    """
+    src = inspect.getsource(harness.run_rep)
+    appends = [ln.strip() for ln in src.splitlines()
+               if "confounds.append" in ln and not ln.strip().startswith("#")]
+    offenders = [ln for ln in appends if "background" in ln]
+    assert not offenders, f"background work must not be a confound, but found: {offenders}"
+    # ...while a genuine subagent spawn must still be one.
+    assert any("subagent" in ln for ln in appends), \
+        "the subagent spawn confound has gone missing"

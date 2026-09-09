@@ -113,13 +113,29 @@ Skill-on cost, same tasks, same model:
 |---|---|---|---|
 | `xlsx` | 167k → 185k (+10%) | 82s → 80s | **0/3 → 3/3** |
 | `docx` | 160k → 1.03M (**6.5×**) | 27s → 501s (**18×**) | none (both pass) |
-| `pptx` | 164k → 491k (**3.0×**) | 35s → 393s (**11×**) | none (both pass) |
+| `pptx` | 164k → **bimodal, see below** | 32s → 235s (**7.4×**) | none (both pass) |
 
-⚠️ The `pptx` figure was previously published as **18×**, from a median that included two
-repetitions in which the agent spawned **downstream work** (an `Agent` subagent or a
-background task). Those calls are real and billed, but they are not attributable to the task's
-own agent loop, so they do not belong in a skill-overhead ratio. Excluding them gives 3.0×.
-See "Downstream LLM calls" below.
+⚠️ **`pptx` has no single honest overhead number, and two earlier attempts to give one were
+wrong.** It was first published as 18×, then corrected to 3.0×. Both were artifacts of
+membership. The ON arm is *bimodal* — six repetitions per task split three-low / three-high:
+
+| task | ON-arm total tokens, sorted |
+|---|---|
+| `pptx-body-left-aligned` | 207k, 254k, 663k ┆ 1234k, 1278k, 1324k |
+| `pptx-size-contrast` | 364k, 380k, 603k ┆ 1275k, 2338k, 2541k |
+
+Against a 164k OFF median that is **≈2.3× in the low mode and ≈7.9× in the high mode**. The
+median of six lands in the empty gap *between* the modes, so it is the least stable statistic
+available here — which is how one membership change moved it from 18× to 3.0×. With n=6 we
+cannot say how often each mode occurs, so we quote the two modes and not an average.
+
+The 3.0× specifically came from excluding the repetitions that used a background task
+(`TaskOutput`). **That exclusion was invalid** and has been reverted: a background task here is
+a background *shell* command, which issues no LLM calls of its own, so its tokens still belong
+to the loop being measured. Empirically too — in both tasks the single most expensive
+repetition carries *no* background tool (1324k vs 1278k; 2541k vs 1275k), so the flag marked a
+subset of the high mode rather than a cause of it. Only a genuine subagent spawn (`Agent`)
+remains a confound; see "Downstream LLM calls" below.
 
 The docx and pptx skills route through Node toolchains (docx-js, pptxgenjs) with npm
 installs and LibreOffice validation loops. That is a real cost worth knowing about, but it
@@ -282,11 +298,16 @@ still safe, because it has no `HTTPS_PROXY` and so never enters the window.
 
 ### Downstream LLM calls
 
-An LLM call can trigger further LLM calls — a subagent (`Agent`) runs its own agent loop, and
-background tasks run asynchronously. **Cortex counts all of them**, because the child's
-`HTTPS_PROXY` is inherited by its subprocesses, so a subagent's traffic traverses the same
-proxy and appears as ordinary response events inside the measurement window. For **cost**
-that is exactly right: those calls are real and billed.
+An LLM call can trigger further LLM calls: a subagent (`Agent`) runs its own agent loop.
+**Cortex counts those**, because the child's `HTTPS_PROXY` is inherited by its subprocesses, so
+a subagent's traffic traverses the same proxy and appears as ordinary response events inside the
+measurement window. For **cost** that is exactly right: those calls are real and billed.
+
+A **background task** (`TaskOutput`/`TaskStop`) is a different thing and is *not* a source of
+downstream LLM calls — it is an asynchronous *shell* command whose output the main loop later
+reads. Its tokens belong to the loop being measured. Conflating the two is what produced the
+withdrawn `pptx` figure above, so the harness records background tools but never treats them as
+a confound.
 
 **But they are not attributable.** On the wire a subagent's call is indistinguishable from the
 main loop's. So:
