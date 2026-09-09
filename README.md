@@ -152,24 +152,83 @@ this arm means genuinely ambiguous prompts, not more clear ones.
 
 ## Comparing models
 
-Pin with `--model` and the pin is verified on the wire. `claude-sonnet-4-6` vs
-`claude-sonnet-5` on the two `xlsx` discriminators, all clean reps aggregated:
+Pin with `--model`; the pin is verified against what Cortex saw on the wire. `profile.py`
+runs a grid and compiles a cost profile; `--report` recompiles from stored runs with no
+invocations, so the analysis is never coupled to a multi-hour run.
 
-| task | model | OFF | ON | ON tokens | ON calls | tokens/call |
-|---|---|---|---|---|---|---|
-| `xlsx-fin-colors` | sonnet-4-6 | 0/3 | 4/4 | 208,340 | 6 | 37,880 |
-| `xlsx-fin-colors` | sonnet-5 | 0/3 | 3/3 | 582,404 | 12 | 48,534 |
-| `xlsx-fin-font-clean` | sonnet-4-6 | 0/3 | 2/2 | 340,610 | 9 | 37,846 |
-| `xlsx-fin-font-clean` | sonnet-5 | 0/5 | 3/3 | 485,797 | 10 | 48,580 |
+```bash
+python3 profile.py --run --reps 5      # the grid
+python3 profile.py --report            # recompile only
+```
 
-**The verdict is identical** — both models fail every OFF rep and pass every ON rep. sonnet-5
-costs 1.4–2.8× the tokens, and its **tokens/call is 1.28× on both tasks**, a consistent
-per-call context increase rather than task noise.
+Full output: [`results/xlsx-cost-profile-20260908.txt`](results/xlsx-cost-profile-20260908.txt)
+— four models on the two `xlsx` discriminators plus the no-skill canary.
 
-So: **a skill-discriminating task cannot rank models.** These tasks are gated by whether an
-arbitrary convention is known, which the skill supplies to either model. Ranking models needs
-tasks at the edge of capability, where the models actually differ — a third kind of task,
-distinct from both the compliance and selection arms.
+### Pass rate ranks models — a prediction of mine that was wrong
+
+I expected pass rate to be useless here: the OFF arm is pinned at 0 by the pre-screen and
+the ON arm at 100 because the skill states the answer. That held for the two mid-tier models
+it was observed on, and **broke as soon as the tiers widened**:
+
+| | OFF | ON |
+|---|---|---|
+| `haiku-4-5` | 0.00 | **0.40** ← does not reliably comply even when told |
+| `sonnet-4-6` | 0.00 | 1.00 |
+| `sonnet-5` | 0.00 | 1.00 |
+| `opus-5` | **0.20** ← sometimes knows the convention unaided | 1.00 |
+
+(`xlsx-fin-font-clean` ON for haiku; `xlsx-fin-colors` OFF for opus-5.) So a compliance task
+does have resolution — just not between models that both sit above the ceiling.
+
+### tokens/call is a model constant; call count is not
+
+Ratio vs `sonnet-4-6`, across five structurally different cells:
+
+| model | spread across cells | reading |
+|---|---|---|
+| `haiku-4-5` | 0.97–1.05, **spread 0.07** | ≈ same per-call context |
+| `sonnet-5` | 1.19–1.30, **spread 0.11** | **≈1.23× more** per call |
+| `opus-5` | 0.89–0.97, **spread 0.08** | **≈0.90× — leaner** per call |
+
+Per-call context is stable enough to budget with. **Call count is not**: it swings 0.40–1.00×
+for haiku and 0.83–2.00× for opus-5 depending on the task. So decompose — the constant term
+is the model, the variable term is the work.
+
+### Cost per solved task, which inverts the naive assumption
+
+`median tokens ÷ pass rate`, so a model that fails is charged for its failures:
+
+| task | haiku-4-5 | sonnet-4-6 | sonnet-5 | opus-5 |
+|---|---|---|---|---|
+| `xlsx-fin-colors` (ON) | **192,703** | 257,611 | 573,855 | 284,825 |
+| `xlsx-fin-font-clean` (ON) | 395,968 | 350,461 | 446,052 | **277,638** |
+| `cortex-pyfix-001` | 204,034 | 195,868 | 200,732 | **144,834** |
+
+`opus-5` is the **cheapest** on two of three and `sonnet-5` the dearest on two of three —
+bigger is not more expensive here. And haiku on `font-clean` shows why the denominator
+matters: its raw token count is the lowest of all four (158k), but at a 0.40 pass rate its
+cost per *solved* task is worse than sonnet-4-6's. Ranking on raw tokens would have picked
+exactly the wrong model.
+
+### The skill is nearly free on opus-5 and expensive on haiku
+
+Skill-on ÷ skill-off tokens:
+
+| task | haiku-4-5 | sonnet-4-6 | sonnet-5 | opus-5 |
+|---|---|---|---|---|
+| `xlsx-fin-colors` | 2.88× | 1.50× | 2.01× | **0.93×** |
+| `xlsx-fin-font-clean` | 2.37× | 2.08× | 1.56× | **1.01×** |
+
+So "what does this skill cost" has no single answer — it is a property of skill × model.
+`opus-5` absorbs it for free, largely because it already works harder on the OFF arm (2.0×
+the calls), so the skill adds guidance rather than effort.
+
+Cache reads are 81–97% of prompt tokens across every model and cell, highest on `sonnet-5`
+and `opus-5` (95–97%).
+
+**No dollar figures anywhere.** Cortex leaves `costMicros` unpopulated (`priced:false`, an
+in-tree TODO), so any price would be one we invented. Tokens are split by tier — apply your
+own rates.
 
 ## Concurrency
 
