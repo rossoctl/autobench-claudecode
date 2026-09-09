@@ -121,6 +121,64 @@ says nothing about whether the resulting document is *better* — these verdicts
 the rules they check, and both skills' main promise is visual quality, which is deliberately
 outside a programmatic verdict.
 
+## Skill selection (a different benchmark)
+
+`--arm select` makes every candidate skill available, does **not** name one in the prompt,
+and scores "did the right skill fire" from the transcript. This is the one place the
+transcript is authoritative: a *model-selected* skill is a real `Skill` tool call, whereas an
+explicit `/skill-name` is expanded client-side and never appears.
+
+```bash
+python3 sweep.py --arm select --reps 3 --pattern 'select-*'
+```
+
+A negative case is mandatory. Measuring only true positives rewards a model that fires a
+skill on everything, so `select-none` is an ordinary Python bugfix where the correct
+behaviour is to invoke nothing.
+
+Result on `claude-sonnet-4-6`, four candidate skills available (`xlsx`/`docx`/`pptx`/`pdf`),
+n=3 each — **12/12 correct, 0 confounded**:
+
+| task | expected | fired |
+|---|---|---|
+| `select-spreadsheet` (names the artifact) | `xlsx` | `xlsx` ×3 |
+| `select-deck` (names the artifact) | `pptx` | `pptx` ×3 |
+| `select-implicit-sheet` (never says "spreadsheet") | `xlsx` | `xlsx` ×3 |
+| `select-none` (plain bugfix) | *nothing* | nothing ×3 |
+
+Selection is reliable, including the implicit case and with no false positives. The obvious
+consequence: these four tasks are now **too easy to discriminate anything**, so extending
+this arm means genuinely ambiguous prompts, not more clear ones.
+
+## Comparing models
+
+Pin with `--model` and the pin is verified on the wire. `claude-sonnet-4-6` vs
+`claude-sonnet-5` on the two `xlsx` discriminators, all clean reps aggregated:
+
+| task | model | OFF | ON | ON tokens | ON calls | tokens/call |
+|---|---|---|---|---|---|---|
+| `xlsx-fin-colors` | sonnet-4-6 | 0/3 | 4/4 | 208,340 | 6 | 37,880 |
+| `xlsx-fin-colors` | sonnet-5 | 0/3 | 3/3 | 582,404 | 12 | 48,534 |
+| `xlsx-fin-font-clean` | sonnet-4-6 | 0/3 | 2/2 | 340,610 | 9 | 37,846 |
+| `xlsx-fin-font-clean` | sonnet-5 | 0/5 | 3/3 | 485,797 | 10 | 48,580 |
+
+**The verdict is identical** — both models fail every OFF rep and pass every ON rep. sonnet-5
+costs 1.4–2.8× the tokens, and its **tokens/call is 1.28× on both tasks**, a consistent
+per-call context increase rather than task noise.
+
+So: **a skill-discriminating task cannot rank models.** These tasks are gated by whether an
+arbitrary convention is known, which the skill supplies to either model. Ranking models needs
+tasks at the edge of capability, where the models actually differ — a third kind of task,
+distinct from both the compliance and selection arms.
+
+## Concurrency
+
+Runs hold an exclusive lock (`out/.harness.lock`). Cortex events are correlated by **time
+window** against one shared proxy, so two overlapping runs interleave — a smoke test run
+beside a sweep picked up the sweep's events and was flagged `multiple_models`. The detector
+caught it; the lock makes it impossible. Interactive Claude Code on the same machine is
+still safe, because it has no `HTTPS_PROXY` and so never enters the window.
+
 ## Isolation, and why it is per-invocation
 
 Everything is passed to the child process, so your own `~/.claude/settings.json` is never

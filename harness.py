@@ -22,10 +22,12 @@ Two deliberate anti-footgun choices:
 """
 import argparse
 import datetime as dt
+import fcntl
 import hashlib
 import json
 import os
 import pathlib
+import re
 import shutil
 import statistics
 import subprocess
@@ -78,6 +80,47 @@ def cortex_alive():
 def sse_alive():
     r = subprocess.run(["pgrep", "-f", "47601/v1/events"], capture_output=True, text=True)
     return r.returncode == 0
+
+
+class RunLock:
+    """Serialise harness runs on this machine.
+
+    Cortex events are correlated by TIME WINDOW against a single shared proxy, so two
+    concurrent runs interleave: a smoke test run beside a sweep picked up the sweep's
+    events and was flagged `multiple_models`. The confound detector caught it, but the
+    right fix is to make the overlap impossible rather than merely detectable.
+
+    Note this only guards runs started through the harness. Interactive Claude Code use on
+    the same machine still lands in the same Cortex, which is why the per-invocation proxy
+    env matters: an interactive session has no HTTPS_PROXY and so stays out of the window.
+    """
+
+    def __init__(self, path, wait_s=7200):
+        self.path = pathlib.Path(path)
+        self.wait_s = wait_s
+        self.fh = None
+
+    def __enter__(self):
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.fh = self.path.open("w")
+        waited = 0.0
+        while True:
+            try:
+                fcntl.flock(self.fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return self
+            except BlockingIOError:
+                if waited == 0:
+                    print("  another harness run holds the lock; waiting...")
+                if waited >= self.wait_s:
+                    raise RuntimeError(f"run lock still held after {self.wait_s}s")
+                time.sleep(2)
+                waited += 2
+
+    def __exit__(self, *exc):
+        if self.fh is not None:
+            fcntl.flock(self.fh, fcntl.LOCK_UN)
+            self.fh.close()
+        return False
 
 
 class Capture:
@@ -188,7 +231,14 @@ def load_task(task_dir):
             # Extra --allowedTools entries this task needs. The docx skill mandates
             # docx-js (Node), so without Bash(node*)/Bash(npm*) the agent silently falls
             # back to python-docx and we would be measuring the fallback, not the skill.
-            "allowed_tools_extra": meta.get("allowed_tools_extra") or []}
+            "allowed_tools_extra": meta.get("allowed_tools_extra") or [],
+            # SELECTION mode: a different benchmark from the on/off compliance arms.
+            # All candidate skills are made available, the prompt does NOT name one, and
+            # the verdict is "did the right skill fire" -- taken from the transcript,
+            # which DOES see model-selected skills (unlike explicit /skill-name).
+            "mode": meta.get("mode") or "compliance",
+            "expected_skill": meta.get("expected_skill"),
+            "candidate_skills": meta.get("candidate_skills") or []}
 
 
 IGNORE = shutil.ignore_patterns("__pycache__", ".pytest_cache", "*.pyc", ".venv", "venv")
@@ -225,6 +275,7 @@ def analyse_transcript(stdout):
     comes from here. Flag the task confounded if the invoked set exceeds expectations --
     the same 'test for the impossible combination' discipline used elsewhere."""
     tools, skills, subagents, turns, result = [], [], [], 0, None
+    skill_names = []
     for line in stdout.splitlines():
         s = line.strip()
         if not s.startswith("{"):
@@ -242,14 +293,20 @@ def analyse_transcript(stdout):
                 name = c.get("name")
                 tools.append(name)
                 if name in ("Skill", "SlashCommand"):
-                    skills.append(json.dumps(c.get("input"))[:120])
+                    inp = c.get("input") or {}
+                    # The skill name lives under different keys depending on the tool;
+                    # keep the raw blob too, for the confound message.
+                    nm = (inp.get("skill") or inp.get("command")
+                          or inp.get("name") or "")
+                    skill_names.append(str(nm).lstrip("/").split()[0] if nm else "?")
+                    skills.append(json.dumps(inp)[:120])
                 elif name == "Task":
                     subagents.append(((c.get("input") or {}).get("subagent_type")
                                       or "unknown"))
         elif t == "result":
             result = ev
-    return {"tools": tools, "skills": skills, "subagents": subagents,
-            "assistant_turns": turns, "result": result}
+    return {"tools": tools, "skills": skills, "skill_names": skill_names,
+            "subagents": subagents, "assistant_turns": turns, "result": result}
 
 
 # ---------------------------------------------------------------- one repetition
@@ -257,7 +314,11 @@ def analyse_transcript(stdout):
 def run_rep(task, rep, cfg_dir, model=DEFAULT_MODEL, arm="on", timeout=1800):
     ws = fresh_ws(task)
     before_tests = test_hashes(ws)
-    if task.get("verdict"):
+    if task.get("mode") == "selection" and not task.get("verdict"):
+        # Selection tasks are scored from the transcript, not from a test suite, so an
+        # empty workspace is expected and "no tests ran" is not a broken baseline.
+        rc0, tail0, baseline_ok = None, "<selection task: transcript-scored>", True
+    elif task.get("verdict"):
         # Hidden-verdict task: the workspace ships no tests, so there is no baseline to
         # take. The equivalent guard is the OFF-arm pre-screen -- a task the agent
         # passes WITHOUT the skill is not measuring the skill and must be discarded.
@@ -279,12 +340,17 @@ def run_rep(task, rep, cfg_dir, model=DEFAULT_MODEL, arm="on", timeout=1800):
         "VIRTUAL_ENV": str(VENV),
     })
 
+    selection = task.get("mode") == "selection"
     prompt = task["prompt"]
     tools = ALLOWED_TOOLS
     if task.get("allowed_tools_extra"):
         tools = tools + " " + " ".join(task["allowed_tools_extra"])
     use_skill = bool(task.get("skill")) and arm == "on"
-    if use_skill:
+    if selection:
+        # Deliberately do NOT name a skill in the prompt: the point is whether the model
+        # picks the right one from the descriptions on its own.
+        tools = tools + " Skill"
+    elif use_skill:
         prompt = f"/{task['skill']} " + prompt
         tools = tools + " Skill"
     cmd = ["claude", "-p", prompt, "--add-dir", ws,
@@ -321,7 +387,8 @@ def run_rep(task, rep, cfg_dir, model=DEFAULT_MODEL, arm="on", timeout=1800):
     # The first means the agent could not do the work at all -- e.g. its skill mandates a
     # Node library and Bash(node*) was not in the allow-list, which is a harness fault and
     # must never be scored as a compliance result.
-    no_artifact = "produced" in out1 and "no " in out1.lower() and rc1 != 0
+    no_artifact = (not selection and "produced" in out1
+                   and "no " in out1.lower() and rc1 != 0)
     passed = (rc1 == 0) and tests_untouched
 
     # Cortex correlation: response-phase events to the target host inside [t0,t1].
@@ -355,18 +422,37 @@ def run_rep(task, rep, cfg_dir, model=DEFAULT_MODEL, arm="on", timeout=1800):
 
     models = sorted({(e.get("inference") or {}).get("model") for e in resp} - {None})
 
+    # --- selection verdict -------------------------------------------------------
+    fired = [s for s in tr.get("skill_names", []) if s and s != "?"]
+    selection_correct = None
+    if selection:
+        exp = task.get("expected_skill")
+        if exp is None:
+            # Negative case: an over-eager selector is as wrong as a blind one, so a
+            # selection benchmark that only tests true positives is half a benchmark.
+            selection_correct = not fired
+        else:
+            selection_correct = exp in fired
+        passed = bool(selection_correct)
+
     confounds = []
     # An explicit /skill-name yields NO tool_use, so a Skill tool_use means the MODEL
     # reached for a skill itself. That is only a CONFOUND when it is a DIFFERENT skill:
     # re-invoking the task's own skill is benign (observed on the ON arm, where the CLI
     # had already injected it and the model called Skill for the same name anyway).
-    foreign = [s for s in tr["skills"]
-               if not (task.get("skill") and f'"{task["skill"]}"' in s)]
-    if foreign:
-        confounds.append(f"foreign_skill_invoked:{foreign}")
+    if selection:
+        # Firing a skill IS the measurement here, so it is never a confound. Only note
+        # when several fired, which muddies attribution.
+        if len(set(fired)) > 1:
+            confounds.append(f"multiple_skills_fired:{sorted(set(fired))}")
+    else:
+        foreign = [s for s in tr["skills"]
+                   if not (task.get("skill") and f'"{task["skill"]}"' in s)]
+        if foreign:
+            confounds.append(f"foreign_skill_invoked:{foreign}")
     if tr["subagents"]:
         confounds.append(f"subagent_invoked:{tr['subagents']}")
-    if task.get("skill_marker"):
+    if task.get("skill_marker") and not selection:
         if arm == "on" and skill_on_wire is False:
             confounds.append("expected_skill_not_on_wire")
         # The OFF arm is the control: if the skill text reached the wire anyway the
@@ -401,7 +487,9 @@ def run_rep(task, rep, cfg_dir, model=DEFAULT_MODEL, arm="on", timeout=1800):
         "tool_calls": len(tr["tools"]),
         "tool_histogram": {t: tr["tools"].count(t) for t in sorted(set(tr["tools"]))},
         "skills_invoked": tr["skills"], "subagents_invoked": tr["subagents"],
-        "arm": arm, "allowed_tools": tools,
+        "arm": arm, "allowed_tools": tools, "mode": task.get("mode"),
+        "skills_fired": fired, "selection_correct": selection_correct,
+        "expected_selection": task.get("expected_skill"),
         "expected_skill": task.get("skill") if use_skill else None,
         "skill_on_wire": skill_on_wire,
         "llm_calls": len(resp), "cortex_tunnels": len(tunnels),
@@ -427,7 +515,7 @@ def main():
     ap.add_argument("task_dir")
     ap.add_argument("--reps", type=int, default=3)
     ap.add_argument("--out", default=str(OUT / "runs"))
-    ap.add_argument("--arm", choices=["on", "off"], default="on",
+    ap.add_argument("--arm", choices=["on", "off", "select"], default="on",
                     help="on = task skill available and invoked; off = control")
     ap.add_argument("--model", default=DEFAULT_MODEL,
                     help=f"model pinned via --model (default {DEFAULT_MODEL})")
@@ -444,7 +532,13 @@ def main():
     cfg_dir = tempfile.mkdtemp(prefix="harness-cfg-")
     skills_dir = pathlib.Path(cfg_dir) / "skills"
     skills_dir.mkdir()
-    if task.get("skill") and a.arm == "on":
+    if task.get("mode") == "selection":
+        for sk in task.get("candidate_skills") or []:
+            src = pathlib.Path(os.path.expanduser(f"~/.claude/skills/{sk}"))
+            if not src.exists():
+                sys.exit(f"task lists candidate skill {sk!r} but {src} does not exist")
+            shutil.copytree(src, skills_dir / sk)
+    elif task.get("skill") and a.arm == "on":
         src = pathlib.Path(os.path.expanduser(f"~/.claude/skills/{task['skill']}"))
         if not src.exists():
             sys.exit(f"task names skill {task['skill']!r} but {src} does not exist")
@@ -453,7 +547,8 @@ def main():
     outdir = pathlib.Path(a.out)
     outdir.mkdir(parents=True, exist_ok=True)
     stamp = dt.datetime.now().strftime("%Y%m%d%H%M%S")
-    ndjson = outdir / f"{task['task_id']}-{a.arm}-{stamp}.ndjson"
+    slug = re.sub(r"[^a-z0-9]+", "-", a.model.lower()).strip("-")
+    ndjson = outdir / f"{task['task_id']}-{a.arm}-{slug}-{stamp}.ndjson"
 
     print(f"task     : {task['task_id']}")
     print(f"reps     : {a.reps}")
@@ -467,7 +562,8 @@ def main():
     print(f"out      : {ndjson}\n")
 
     recs = []
-    with Capture() as cap, ndjson.open("w") as fh:
+    with RunLock(OUT / ".harness.lock"), Capture() as cap, \
+            ndjson.open("w") as fh:
         print(f"capture  : {'adopted existing' if cap.adopted else 'started'} "
               f"-> {SSE_FILE}\n")
         for i in range(1, a.reps + 1):
@@ -475,8 +571,13 @@ def main():
             recs.append(rec)
             fh.write(json.dumps(rec) + "\n")
             fh.flush()
+            sel = ""
+            if rec.get("mode") == "selection":
+                sel = (f"fired={rec['skills_fired']} "
+                       f"want={rec['expected_selection']} ")
             print(f"  rep {i}: passed={rec['passed']} "
-                  f"pytest='{rec['pytest_tail'][:34]}' "
+                  f"{sel}"
+                  f"pytest='{rec['pytest_tail'][:30]}' "
                   f"turns={rec['assistant_turns']} tools={rec['tool_calls']} "
                   f"llm_calls={rec['llm_calls']} pin_ok={rec['model_pin_honoured']} "
                   f"tok(in/out/cache)={rec['input_tokens']}/{rec['output_tokens']}/"

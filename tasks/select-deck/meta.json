@@ -1,0 +1,18 @@
+{
+  "mode": "selection",
+  "expected_skill": "pptx",
+  "candidate_skills": [
+    "xlsx",
+    "docx",
+    "pptx",
+    "pdf"
+  ],
+  "allowed_tools_extra": [
+    "Bash(node*)",
+    "Bash(npm*)",
+    "Bash(python*)",
+    "Bash(soffice*)",
+    "Bash(ls*)",
+    "Bash(cat*)"
+  ]
+}

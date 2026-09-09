@@ -9,6 +9,7 @@ import glob
 import os
 import json
 import pathlib
+import re
 import statistics
 import subprocess
 import sys
@@ -19,7 +20,7 @@ OUT = pathlib.Path(os.environ.get("HARNESS_OUT", ROOT / "out"))
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--arm", choices=["on", "off"], required=True)
+    ap.add_argument("--arm", choices=["on", "off", "select"], required=True)
     ap.add_argument("--reps", type=int, default=3)
     ap.add_argument("--pattern", default="xlsx-*")
     ap.add_argument("--model", default="claude-sonnet-4-6")
@@ -34,7 +35,8 @@ def main():
             [sys.executable, "-u", str(ROOT / "harness.py"), str(t),
              "--reps", str(a.reps), "--arm", a.arm, "--model", a.model],
             capture_output=True, text=True, timeout=7200)
-        latest = sorted(glob.glob(str(OUT / "runs" / f"{t.name}-{a.arm}-*.ndjson")))
+        slug = re.sub(r"[^a-z0-9]+", "-", a.model.lower()).strip("-")
+        latest = sorted(glob.glob(str(OUT / "runs" / f"{t.name}-{a.arm}-{slug}-*.ndjson")))
         if not latest:
             print(f"  {t.name:28} NO OUTPUT (exit={r.returncode})")
             print("   " + r.stdout.strip()[-400:])
@@ -50,8 +52,14 @@ def main():
                      "wire": wires, "tokens": toks, "wall": wall,
                      "reasons": reasons, "file": latest[-1],
                      "fails": [x["pytest_tail"] for x in recs if not x["passed"]]})
-        print(f"  {t.name:28} pass={npass}/{len(recs)} confounded={conf} "
-              f"skill_on_wire={wires} tok_med={toks} wall_med={wall}s")
+        if a.arm == "select":
+            fired = [x.get("skills_fired") for x in recs]
+            want = recs[0].get("expected_selection")
+            print(f"  {t.name:24} correct={npass}/{len(recs)} want={want or '<none>'} "
+                  f"fired={fired} confounded={conf} tok_med={toks} wall_med={wall}s")
+        else:
+            print(f"  {t.name:28} pass={npass}/{len(recs)} confounded={conf} "
+                  f"skill_on_wire={wires} tok_med={toks} wall_med={wall}s")
         if reasons:
             print(f"      confounds: {reasons}")
         for f in rows[-1]["fails"][:1]:
@@ -60,13 +68,18 @@ def main():
     print(f"\n===== ARM {a.arm.upper()} SUMMARY =====")
     for r in rows:
         verdict = ""
-        if a.arm == "off":
+        if a.arm == "select":
+            verdict = ("  <== correct" if r["pass"] == r["n"]
+                       else "  <== WRONG every time" if r["pass"] == 0
+                       else "  <== inconsistent")
+        elif a.arm == "off":
             verdict = ("  <== DISCARD (passes without the skill)" if r["pass"] == r["n"]
                        else "  <== keep" if r["pass"] == 0
                        else "  <== marginal (partial pass unaided)")
         print(f"  {r['task']:28} {r['pass']}/{r['n']}{verdict}")
     OUT.mkdir(parents=True, exist_ok=True)
-    pathlib.Path(OUT / f"sweep-{a.arm}.json").write_text(
+    slug = re.sub(r"[^a-z0-9]+", "-", a.model.lower()).strip("-")
+    pathlib.Path(OUT / f"sweep-{a.arm}-{slug}.json").write_text(
         json.dumps([{k: (sorted(v) if isinstance(v, set) else v) for k, v in r.items()}
                     for r in rows], indent=2))
 
