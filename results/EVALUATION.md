@@ -31,7 +31,29 @@ Three findings that a simpler measurement would have got wrong:
 
 ---
 
-## 2. Terms in use
+## 2. What a benchmark is made of
+
+Six parts. Drop any one and you have a demo, a load generator, or a number nobody can
+defend. **Cortex supplies exactly one of them.**
+
+| Part | Why it is required | Here |
+|---|---|---|
+| **Tasks** | A defined unit of work, reproducible from a fixed definition into a fresh workspace every time | `tasks/<id>/prompt.md` + `workspace/` |
+| **Programmatic evaluator** | A verdict that is a command's exit code, not a model's opinion. This is what makes it a benchmark rather than a load generator | hidden `verdict/` → `pytest -q` |
+| **Controls** | An arm that isolates the one variable under study, so an effect can be attributed to it | `off` / `on` / `select` arms |
+| **Repetition** | The subject is non-deterministic, so a single run is an anecdote. Report medians and spread | *n* per cell, CV reported |
+| **Attribution** | Evidence of what *actually* ran, so a result produced by something other than the thing under test is caught | `stream-json` transcript → confounds |
+| **Observability** | What it cost: tokens by cache tier, latency, the real model served — measured, not estimated | **Cortex supplies this** |
+
+**Cortex is a component of the harness, not the benchmark.** It supplies the observability
+data and nothing else: it sees bytes on the wire and can never score whether the work was
+correct. Conversely the verdict knows correctness but nothing about cost, and the transcript
+knows which local tools ran but carries no token counts. That separation is why all three
+sources are needed — see §4.
+
+---
+
+## 3. Terms in use
 
 These were conflated early in the work and are kept strictly separate.
 
@@ -55,7 +77,7 @@ It is never used here as a common noun.
 
 ---
 
-## 3. Benchmarking setup, and why it is shaped this way
+## 4. Benchmarking setup, and why it is shaped this way
 
 ```
    ┌──────────────────────────────────────────────────────────────────────────┐
@@ -135,10 +157,23 @@ the only durable record.
 
 ---
 
-## 4. Model pricing (internal LiteLLM, 2026-09-09)
+## 5. Model pricing (internal LiteLLM, 2026-09-09)
 
-Transcribed from the gateway's own model pages. `/model/info` returns **403** for a
-non-admin key, so these are hand-entered rather than pulled programmatically.
+**Provenance.** `pricing.py` attempts a live pull from the gateway first
+(`/v2/model/info`, `/model/info`, `/model_group/info`) and falls back to the table below.
+The live pull is currently **refused**, with an unambiguous reason:
+
+```
+403 {"detail": "Virtual key is not allowed to call this route.
+     Only allowed to call routes: ['llm_api_routes']"}
+```
+
+The benchmark credential is a LiteLLM **virtual key** scoped to LLM API routes, so it can
+call `/v1/chat/completions` and `/v1/models` but no management route. The UI page embeds no
+prices either — it is a client-side app fetching from those same routes. So the figures
+below are **transcribed from the gateway's model pages on 2026-09-09**. Set
+`LITELLM_ADMIN_KEY` to an admin/master key and `pricing.py` will pull the rate card
+directly and reconcile it against this table, flagging any mismatch.
 
 | Benchmarked alias | Gateway entry | Input $/1M | Output $/1M | Output:input |
 |---|---|---|---|---|
@@ -173,7 +208,7 @@ in-tree TODO), so every dollar figure here is computed by us from token counts.
 
 ---
 
-## 5. Methodology: how a task earns its place
+## 6. Methodology: how a task earns its place
 
 A task is only admitted if it can actually measure something. Two rules, both learned the
 hard way — **9 of the first 11 tasks written were discarded.**
@@ -209,9 +244,9 @@ footgun. Testing those needs the same library forced in both arms — a differen
 
 ---
 
-## 6. Results
+## 7. Results
 
-### 6.1 Pass rate — and a prediction of ours that was falsified
+### 7.1 Pass rate — and a prediction of ours that was falsified
 
 We predicted pass rate would be useless for ranking models: the OFF arm is pinned at 0 by the
 pre-screen, the ON arm at 100 because the skill states the answer. **That held only for the
@@ -227,7 +262,7 @@ two mid-tier models it was observed on.** Widening the tiers broke it in both di
 **Generalisable lesson: "the measure is saturated" is a claim about the models you happened
 to test, not about the task.**
 
-### 6.2 Tokens — one term is a model constant, the other is not
+### 7.2 Tokens — one term is a model constant, the other is not
 
 `tokens/call` ratio vs `sonnet-4-6`, across five structurally different cells:
 
@@ -243,7 +278,7 @@ conflates them.
 
 Cache reads are **81–97% of prompt tokens** in every cell (highest on `sonnet-5`/`opus-5`).
 
-### 6.3 Money — which reverses the token conclusion
+### 7.3 Money — which reverses the token conclusion
 
 Cost per **solved** task, scenario B (standard cache), `$` per task:
 
@@ -266,7 +301,7 @@ Scenario A (no cache discount) for the same cells — **same ordering throughout
 **`opus-5` used the fewest tokens on two of three cells and is the most expensive on all
 three.** That is the entire case for pricing the measurement rather than counting tokens.
 
-### 6.4 Skill overhead is a property of skill × model
+### 7.4 Skill overhead is a property of skill × model
 
 Skill-on ÷ skill-off tokens:
 
@@ -279,7 +314,7 @@ Skill-on ÷ skill-off tokens:
 because it already works ~2× the calls on the OFF arm, so the skill adds guidance rather than
 effort.
 
-### 6.5 Skill selection works
+### 7.5 Skill selection works
 
 All candidate skills present (`xlsx`/`docx`/`pptx`/`pdf`), prompt names none, verdict from
 the transcript. `sonnet-4-6`, n=3: **12/12 correct, 0 confounded** — including a prompt that
@@ -288,7 +323,7 @@ correct (fired nothing 3/3, so no over-eagerness).
 
 ---
 
-## 7. Model selection recommendation
+## 8. Model selection recommendation
 
 **Adopt `claude-sonnet-5` as the default.** 100% pass on every task, and cheaper than the
 incumbent `sonnet-4-6` in 2 of 3 cells — 29% cheaper on `xlsx-fin-font-clean` and 30% on the
@@ -311,7 +346,7 @@ are not tight — see limitations.
 
 ---
 
-## 8. Limitations, stated plainly
+## 9. Limitations, stated plainly
 
 1. **One skill.** Every skill-specific conclusion rests on `xlsx`. Whether "the skill is free
    on opus-5" is an opus property or an xlsx property is currently indistinguishable.
@@ -332,7 +367,7 @@ premium.
 
 ---
 
-## 9. Reproducing
+## 10. Reproducing
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt

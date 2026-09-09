@@ -7,6 +7,7 @@ regenerated when numbers change. Every figure here is also in that document.
 Uses python-pptx directly. Applies the size-hierarchy and left-alignment rules the harness
 itself measures: display 40pt, slide titles 30pt, body 14-16pt, body never centred.
 """
+import datetime as dt
 import pathlib
 
 from pptx import Presentation
@@ -58,14 +59,26 @@ def tb(slide, text, l, t, w, h, size, *, color=BODY, bold=False, align=PP_ALIGN.
     return box
 
 
+CURRENT = {"sec": None}
+
+
+def section(num, name):
+    """Declare the section that subsequent slides belong to."""
+    CURRENT["sec"] = (num, name)
+
+
 def slide_title(slide, title, kicker=None):
     """Kicker + title + accent rule.
 
     At 30pt across 11.9in roughly 52 characters fit on one line. A longer title wraps and
     the accent rule then strikes through the second line, so the rule is pushed down.
     """
-    if kicker:
-        tb(slide, kicker.upper(), 0.7, 0.45, 11.9, 0.3, 11, color=MUTED, bold=True)
+    sec = CURRENT["sec"]
+    prefix = f"{sec[0]} · {sec[1].upper()}" if sec else ""
+    line = (f"{prefix}  ·  {kicker.upper()}" if (prefix and kicker)
+            else (prefix or (kicker or "").upper()))
+    if line:
+        tb(slide, line, 0.7, 0.45, 11.9, 0.3, 11, color=MUTED, bold=True)
     tb(slide, title, 0.7, 0.75, 11.9, 0.8, 30, color=INK, bold=True)
     accent_y = 1.62 if len(title) <= 52 else 2.08
     ln = slide.shapes.add_shape(1, Inches(0.7), Inches(accent_y), Inches(1.1), Inches(0.05))
@@ -134,41 +147,44 @@ s = prs.slides.add_slide(BLANK); bg(s, INK); DARK_SLIDES.add(len(prs.slides._sld
 tb(s, "Benchmarking Claude Code", 0.9, 2.1, 11.5, 1.1, 46, color=RGBColor(0xFF, 0xFF, 0xFF), bold=True)
 tb(s, "Cost, skill effect and model selection — measured, priced, and where it\nsurprised us",
    0.9, 3.4, 11.0, 1.0, 20, color=ICE)
-tb(s, "193 recorded repetitions  ·  4 models  ·  internal LiteLLM  ·  2026-09-09",
-   0.9, 5.9, 11.0, 0.4, 13, color=RGBColor(0x9A, 0xB0, 0xD8))
+tb(s, "193 recorded repetitions  ·  4 models  ·  internal LiteLLM",
+   0.9, 5.75, 11.0, 0.4, 13, color=RGBColor(0x9A, 0xB0, 0xD8))
+tb(s, f"Last modified {dt.datetime.now().astimezone().strftime('%Y-%m-%d %H:%M %Z')}",
+   0.9, 6.2, 11.0, 0.35, 12, color=RGBColor(0x7A, 0x8F, 0xC0))
 
 # ─────────────────────────────────────────────────────────── 2. table of contents
 s = prs.slides.add_slide(BLANK); bg(s, PAPER)
 slide_title(s, "Contents", "table of contents")
-# Two columns: a single column ran the last section into the footnote.
+# Two columns; section numbers match the kickers on each slide.
 SECTIONS = [
-    ("Setup and method", [
-        ("3", "What is being measured"),
-        ("4", "Terms in use"),
-        ("5", "Benchmarking setup — architecture"),
-        ("6", "Why this shape — rationale per decision"),
-        ("7", "How a task earns its place — 9 of 11 discarded"),
+    ("1 · Setup and method", [
+        ("3", "What a benchmark is made of"),
+        ("4", "What is being measured"),
+        ("5", "Terms in use"),
+        ("6", "Benchmarking setup — architecture"),
+        ("7", "Why this shape — rationale"),
+        ("8", "How a task earns its place"),
     ]),
-    ("Pricing", [
-        ("8", "Model pricing — internal LiteLLM rate card"),
+    ("2 · Pricing", [
+        ("9", "Model pricing — internal LiteLLM rate card"),
     ]),
-    ("Findings", [
-        ("9", "A prediction of ours that was falsified"),
-        ("10", "Token cost splits into two factors"),
-        ("11", "Money reverses the token conclusion"),
-        ("12", "Skill cost is a property of skill × model"),
-        ("13", "Skill selection is reliable"),
+    ("3 · Findings", [
+        ("10", "A prediction of ours that was falsified"),
+        ("11", "Two factors drive token cost"),
+        ("12", "Money reverses the token conclusion"),
+        ("13", "Skill cost is a property of skill × model"),
+        ("14", "Skill selection is reliable"),
     ]),
-    ("Conclusion", [
-        ("14", "Model selection recommendation"),
-        ("15", "Limitations, stated plainly"),
+    ("4 · Conclusion", [
+        ("15", "Model selection recommendation"),
+        ("16", "Limitations, stated plainly"),
     ]),
 ]
 COLS = [(0.7, SECTIONS[:2]), (6.9, SECTIONS[2:])]
 for x, groups in COLS:
     y = 2.05
-    for section, items in groups:
-        tb(s, section.upper(), x, y, 5.4, 0.3, 12, color=INK, bold=True)
+    for sec_name, items in groups:
+        tb(s, sec_name.upper(), x, y, 5.4, 0.3, 12, color=INK, bold=True)
         y += 0.4
         for num, label in items:
             tb(s, num, x, y, 0.5, 0.3, 14, color=ICE, bold=True, align=PP_ALIGN.RIGHT)
@@ -178,7 +194,49 @@ for x, groups in COLS:
 tb(s, "Every figure in this deck also appears in results/EVALUATION.md, which carries the full detail\n"
       "and the reproduction steps.", 0.7, 6.4, 11.9, 0.6, 12, color=MUTED)
 
-# ─────────────────────────────────────────────────────────── 3. what this is
+section(1, "Setup and method")
+
+# ─────────────────────────────────────────── 3. anatomy of a benchmark
+s = prs.slides.add_slide(BLANK); bg(s, PAPER)
+slide_title(s, "What a benchmark is made of", "anatomy")
+tb(s, "Six parts. Drop any one and you have a demo, a load generator, or a number nobody can defend.",
+   0.7, 1.95, 11.9, 0.3, 15, color=INK)
+
+PARTS = [
+    ("TASKS",
+     "A defined unit of work, reproducible from a\nfixed definition into a fresh workspace.",
+     "tasks/<id>/prompt.md + workspace/"),
+    ("PROGRAMMATIC EVALUATOR",
+     "A verdict that is a command's exit code, not a\nmodel's opinion. This is what makes it a benchmark.",
+     "hidden verdict/ → pytest -q"),
+    ("CONTROLS",
+     "An arm that isolates the one variable under\nstudy, so an effect can be attributed to it.",
+     "off / on / select arms"),
+    ("REPETITION",
+     "The subject is non-deterministic, so one run is\nan anecdote. Report medians and spread.",
+     "n per cell, CV reported"),
+    ("ATTRIBUTION",
+     "Evidence of what ACTUALLY ran, so a result from\nsomething other than the thing tested is caught.",
+     "stream-json transcript → confounds"),
+    ("OBSERVABILITY",
+     "What it cost: tokens by cache tier, latency, the\nreal model served. Measured, not estimated.",
+     "Cortex supplies this"),
+]
+for i, (name, why, how) in enumerate(PARTS):
+    col, row = i % 3, i // 3
+    lx = 0.7 + col * 4.05
+    ly = 2.45 + row * 2.0
+    is_obs = name == "OBSERVABILITY"
+    box(s, "", lx, ly, 3.8, 1.8, fill=(ICE if is_obs else RGBColor(0xFF, 0xFF, 0xFF)))
+    tb(s, name, lx + 0.2, ly + 0.13, 3.4, 0.3, 12, color=INK, bold=True)
+    tb(s, why, lx + 0.2, ly + 0.55, 3.4, 0.75, 11, color=BODY)
+    tb(s, how, lx + 0.2, ly + 1.42, 3.4, 0.3, 10.5, color=MUTED, bold=True)
+
+box(s, "Cortex is a COMPONENT of the harness — it supplies the observability data. It is not the benchmark, and it\n"
+      "cannot score anything: it sees bytes on the wire, never whether the work was correct.",
+    0.7, 6.5, 11.2, 0.68, fill=INK, color=RGBColor(0xFF, 0xFF, 0xFF), size=13, bold=True)
+
+# ─────────────────────────────────────────────────────────── 4. what this is
 s = prs.slides.add_slide(BLANK); bg(s, PAPER)
 slide_title(s, "What is being measured", "scope")
 tb(s, "The subject under test is the Claude Code agent itself — not a model in isolation.",
@@ -279,7 +337,9 @@ rows = [["rule kind", "example", "outcome"],
 table(s, rows, 0.7, 5.0, 11.9, [3.1, 6.4, 2.4], size=12,
       highlight={(1, 2): GOOD, (2, 2): WARN, (3, 2): WARN})
 
-# ─────────────────────────────────────────────────────────── 8. pricing
+section(2, "Pricing")
+
+# ─────────────────────────────────────────────────── 9. pricing
 s = prs.slides.add_slide(BLANK); bg(s, PAPER)
 slide_title(s, "Model pricing — internal LiteLLM", "rate card, 2026-09-09")
 rows = [["benchmarked alias", "gateway entry", "input $/1M", "output $/1M", "vs sonnet-5"],
@@ -299,7 +359,9 @@ tb(s, "The gateway publishes only Input and Output rates, but 81–97% of our pr
       "The model ranking is identical under both, so the recommendation does not depend on resolving it.",
    0.7, 4.85, 11.9, 1.5, 13, color=BODY, spacing=3)
 
-# ─────────────────────────────────────────────────────────── 9. finding: falsified
+section(3, "Findings")
+
+# ────────────────────────────────────── 10. finding: falsified
 s = prs.slides.add_slide(BLANK); bg(s, PAPER)
 slide_title(s, "A prediction of ours that was falsified", "finding 1 · pass rate")
 tb(s, "We argued a compliance task cannot rank models: the OFF arm is pinned at 0 by the pre-screen and the ON\n"
@@ -400,9 +462,12 @@ box(s, "Only here is the transcript authoritative: a MODEL-SELECTED skill is a r
       "whereas an explicit /skill-name is expanded client-side and never appears in the transcript at all.",
     0.7, 5.35, 11.7, 0.95, fill=RGBColor(0xFF, 0xFF, 0xFF), size=13, color=INK)
 
-# ─────────────────────────────────────────────────────────── 14. recommendation
+section(4, "Conclusion")
+
+# ─────────────────────────── 14. recommendation
 s = prs.slides.add_slide(BLANK); bg(s, INK); DARK_SLIDES.add(len(prs.slides._sldIdLst))
-tb(s, "Model selection recommendation", 0.7, 0.6, 11.9, 0.7, 32,
+tb(s, "4 · CONCLUSION  ·  RECOMMENDATION", 0.7, 0.42, 11.9, 0.3, 11, color=ICE, bold=True)
+tb(s, "Model selection recommendation", 0.7, 0.75, 11.9, 0.7, 30,
    color=RGBColor(0xFF, 0xFF, 0xFF), bold=True)
 tb(s, "on the benchmark evidence, for skill-driven document work", 0.7, 1.35, 11.9, 0.35, 14, color=ICE)
 box(s, "ADOPT AS DEFAULT\n\nclaude-sonnet-5\n\n100% pass on every task, and cheaper\n"
@@ -439,10 +504,9 @@ tb(s, "Full detail, every figure and the reproduction steps: results/EVALUATION.
 
 # ── page numbers on every slide. Stamped last so it survives any reordering, and it
 # reads the real slide count rather than a hardcoded total.
-total = len(prs.slides._sldIdLst)
 for idx, sl in enumerate(prs.slides, 1):
     dark = idx in DARK_SLIDES
-    tb(sl, f"{idx} / {total}", 11.9, 6.95, 0.75, 0.3, 11,
+    tb(sl, str(idx), 12.1, 6.95, 0.5, 0.3, 11,
        color=(RGBColor(0x9A, 0xB0, 0xD8) if dark else MUTED), align=PP_ALIGN.RIGHT)
 
 OUT.parent.mkdir(parents=True, exist_ok=True)

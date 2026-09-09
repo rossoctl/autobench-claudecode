@@ -22,7 +22,53 @@ was served, but whether the bare alias bills at the same rate as the `aws/` entr
 be verified with a non-admin key. Same-underlying-model is assumed.
 """
 
-# $ per 1M tokens, from the gateway UI.
+PRICE_ROUTES = ("/v2/model/info", "/model/info", "/model_group/info")
+
+
+def fetch_live(base=None, token=None):
+    """Try to pull the rate card from the gateway. Returns {} when not permitted.
+
+    Wired even though it currently fails: the benchmark credential is a LiteLLM VIRTUAL
+    key restricted to `llm_api_routes`, so every management route returns
+
+        403 {"detail": "Virtual key is not allowed to call this route.
+             Only allowed to call routes: ['llm_api_routes']"}
+
+    Pricing needs an admin/master key or a UI session. The UI page itself embeds no
+    prices -- it is a client-side app that fetches from these same routes. Supply an
+    admin key as LITELLM_ADMIN_KEY and this takes over from the transcribed table below.
+    """
+    import json as _json
+    import os as _os
+    import ssl as _ssl
+    import urllib.error as _err
+    import urllib.request as _req
+    base = (base or _os.environ.get("ANTHROPIC_BASE_URL", "")).rstrip("/")
+    token = token or _os.environ.get("LITELLM_ADMIN_KEY") or _os.environ.get("ANTHROPIC_AUTH_TOKEN")
+    if not (base and token):
+        return {}
+    ctx = _ssl.create_default_context()
+    for route in PRICE_ROUTES:
+        r = _req.Request(base + route, headers={"Authorization": "Bearer " + token})
+        try:
+            with _req.urlopen(r, timeout=25, context=ctx) as resp:
+                rows = _json.loads(resp.read()).get("data", [])
+        except (_err.HTTPError, Exception):
+            continue
+        out = {}
+        for e in rows:
+            name = e.get("model_name") or e.get("model_group")
+            info = e.get("model_info") or {}
+            ic, oc = info.get("input_cost_per_token"), info.get("output_cost_per_token")
+            if name and ic is not None and oc is not None:
+                out[name] = {"in": ic * 1e6, "out": oc * 1e6, "source": f"live {route}"}
+        if out:
+            return out
+    return {}
+
+
+# $ per 1M tokens. SOURCE: transcribed from the gateway's own model pages
+# (/ui/?page=models) on 2026-09-09, because fetch_live() above is refused for this key.
 PRICES = {
     "claude-haiku-4-5-20251001": {"in": 0.76, "out": 3.80,
                                   "ui": "aws/claude-haiku-4-5",
@@ -63,8 +109,26 @@ def table():
 
 
 if __name__ == "__main__":
+    live = fetch_live()
     print(f"{'benchmarked alias':28} {'gateway entry':24} {'in $/1M':>8} {'out $/1M':>9} {'out:in':>7}")
     for m, ui, i, o, r in table():
         print(f"{m:28} {ui:24} {i:>8.2f} {o:>9.2f} {r:>6.1f}x")
-    print(f"\nCache multipliers applied in scenario B: read x{CACHE_READ_MULT}, "
+    print()
+    if not live:
+        print("  source: TRANSCRIBED from the gateway UI (2026-09-09).")
+        print("  live fetch refused: the benchmark key is a LiteLLM virtual key limited to")
+        print("  llm_api_routes; /v2/model/info and friends return 403. Set LITELLM_ADMIN_KEY")
+        print("  to pull the rate card directly instead.")
+    else:
+        print("  source: LIVE from the gateway. Reconciling against the transcribed table:")
+        for m, p in PRICES.items():
+            for key in (m, p["ui"]):
+                if key in live:
+                    d_in = abs(live[key]["in"] - p["in"])
+                    d_out = abs(live[key]["out"] - p["out"])
+                    flag = "OK" if (d_in < 0.005 and d_out < 0.005) else "MISMATCH"
+                    print(f"    {key:26} live {live[key]['in']:.2f}/{live[key]['out']:.2f}  "
+                          f"transcribed {p['in']:.2f}/{p['out']:.2f}  {flag}")
+                    break
+    print(f"\n  Cache multipliers in scenario B: read x{CACHE_READ_MULT}, "
           f"write x{CACHE_WRITE_MULT} (unverified for this gateway)")
