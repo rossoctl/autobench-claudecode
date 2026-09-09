@@ -8,7 +8,20 @@ is real resolution outside the sonnet band. Pass rate is reported as a measureme
 
 Two modes so the analysis is never coupled to a 2-hour run:
     profile.py --run       execute the grid (serialised by the harness run lock)
-    profile.py --report    recompile from out/runs, no invocations
+    profile.py --report    recompile from the frozen manifest, no invocations
+    profile.py --freeze    pin exactly which run files this profile is built from
+
+MEMBERSHIP IS PINNED, and it has to be. `--report` was documented as "never coupled to the
+run", but it globbed every *.ndjson under out/runs + out/runs-archive and pooled anything
+sharing a (task, arm, model) key -- so ANY later harness invocation silently joined a
+published cell. Measured 2026-09-09: a single one-rep canary moved cortex-pyfix-001 / on /
+sonnet-4-6 from n=10 to n=11 and its median from 195,868 to 195,889, after which the
+published results/xlsx-cost-profile-*.txt no longer reproduced. A published artifact whose
+inputs are "whatever is on disk today" is not reproducible; it is merely undisturbed.
+
+So results/profile-manifest.json lists the exact files, their row counts and their sha256.
+`--report` reads it and shouts if a file went missing or changed underneath. Adding reps is
+now a deliberate act (`--freeze` again), not a side effect of running anything else.
 
 Reported per cell and then across models:
   * tok/LLMcall        tokens per LLM CALL (one /v1/chat/completions) -- a MODEL constant.
@@ -24,6 +37,7 @@ invented. Tokens are reported by tier; apply your own pricing.
 """
 import argparse
 import glob
+import hashlib
 import json
 import pathlib
 import statistics
@@ -33,6 +47,9 @@ from collections import defaultdict
 
 ROOT = pathlib.Path(__file__).resolve().parent
 OUT = ROOT / "out"
+# Committed, unlike out/ -- it is filenames, row counts and hashes, no prompt content.
+MANIFEST = ROOT / "results" / "profile-manifest.json"
+RUN_DIRS = ("out/runs", "out/runs-archive")
 
 MODELS = [
     "claude-haiku-4-5-20251001",
@@ -73,16 +90,98 @@ def run(reps):
 
 # ------------------------------------------------------------------ reporting
 
-def load():
-    """Every rep, keyed (task, arm, model). Keyed on the record, not the filename."""
+def all_run_files():
+    fs = []
+    for d in RUN_DIRS:
+        fs += glob.glob(str(ROOT / d / "*.ndjson"))
+    return sorted(fs)
+
+
+def digest(p):
+    return hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest()
+
+
+def rows_of(p):
+    return [ln for ln in pathlib.Path(p).read_text().splitlines() if ln.strip()]
+
+
+def freeze(exclude=()):
+    """Pin the current membership. Excluded basenames stay on disk but leave the profile.
+
+    Excluding is for reps that are real measurements but belong to a DIFFERENT experiment
+    than the published grid -- a canary, a smoke test. The data is never deleted; it simply
+    is not retroactively pooled into a cell someone has already published a number for.
+    """
+    entries, skipped, empty = [], [], []
+    for f in all_run_files():
+        base = pathlib.Path(f).name
+        if base in exclude:
+            skipped.append(base)
+            continue
+        rows = len(rows_of(f))
+        if rows == 0:
+            # An aborted run that wrote no records. It carries no measurement, so hashing
+            # it only creates an integrity entry for nothing -- but say so out loud, because
+            # a zero-row file can also mean a run died partway and deserves a look.
+            empty.append(base)
+            continue
+        entries.append({"file": str(pathlib.Path(f).relative_to(ROOT)),
+                        "rows": rows, "sha256": digest(f)})
+    MANIFEST.parent.mkdir(parents=True, exist_ok=True)
+    MANIFEST.write_text(json.dumps(
+        {"note": "Exact inputs to the xlsx cost profile. --report reads only these. "
+                 "Regenerate with `profile.py --freeze` after a deliberate --run.",
+         "excluded": sorted(skipped),
+         "files": entries}, indent=2) + "\n")
+    total = sum(e["rows"] for e in entries)
+    print(f"froze {len(entries)} files / {total} reps -> "
+          f"{MANIFEST.relative_to(ROOT)}")
+    if skipped:
+        print(f"excluded {len(skipped)}: " + ", ".join(skipped))
+    if empty:
+        print(f"skipped {len(empty)} zero-row file(s): " + ", ".join(empty))
+    return entries
+
+
+def load(use_manifest=True):
+    """Every rep, keyed (task, arm, model). Keyed on the record, not the filename.
+
+    Returns (by, provenance, problems). `problems` being non-empty means the numbers below
+    are NOT the published ones -- it is printed loudly rather than folded into a footnote.
+    """
+    problems = []
+    if use_manifest and MANIFEST.exists():
+        man = json.loads(MANIFEST.read_text())
+        files = []
+        for e in man["files"]:
+            p = ROOT / e["file"]
+            if not p.exists():
+                problems.append(f"MISSING  {e['file']}")
+                continue
+            if digest(p) != e["sha256"]:
+                problems.append(f"CHANGED  {e['file']} (sha256 differs from the manifest)")
+            files.append(str(p))
+        extra = len(all_run_files()) - len(man["files"]) - len(man.get("excluded") or [])
+        provenance = (f"frozen manifest: {len(man['files'])} files"
+                      + (f", {len(man['excluded'])} deliberately excluded"
+                         if man.get("excluded") else "")
+                      + (f"; {extra} newer run file(s) on disk are NOT included"
+                         if extra > 0 else ""))
+    else:
+        files = all_run_files()
+        provenance = (f"UNPINNED glob of {'/'.join(RUN_DIRS)} ({len(files)} files) -- "
+                      "run `profile.py --freeze` to make this reproducible")
+        if use_manifest:
+            problems.append(f"NO MANIFEST at {MANIFEST.relative_to(ROOT)}; "
+                            "membership is whatever is on disk right now")
+
     by = defaultdict(list)
-    for d in ("out/runs", "out/runs-archive"):
-        for f in sorted(glob.glob(str(ROOT / d / "*.ndjson"))):
-            for line in pathlib.Path(f).read_text().splitlines():
-                r = json.loads(line)
-                by[(r["task_id"], r.get("arm", "on"),
-                    r.get("model_requested") or "<unpinned>")].append(r)
-    return by
+    for f in files:
+        for line in rows_of(f):
+            r = json.loads(line)
+            by[(r["task_id"], r.get("arm", "on"),
+                r.get("model_requested") or "<unpinned>")].append(r)
+    return by, provenance, problems
 
 
 def integrity(rs):
@@ -108,11 +207,16 @@ def cv(rs, k):
     return (statistics.pstdev(v) / m) if m else 0.0
 
 
-def report(reps):
-    by = load()
+def report(reps, use_manifest=True):
+    by, provenance, problems = load(use_manifest)
     print("=" * 100)
     print("xlsx COST PROFILE".center(100))
     print("=" * 100)
+    if problems:
+        # Loud and first: if membership drifted, every number below is suspect.
+        print("\n!! MEMBERSHIP PROBLEM -- numbers below may not match the published run:")
+        for p in problems:
+            print(f"   {p}")
     print("\nI predicted pass rate would be saturated -- OFF pinned at 0 by the pre-screen,")
     print("ON at 100 because the skill states the answer -- and therefore useless for")
     print("ranking models. THE DATA REFUTES THAT. Saturation only held for the two")
@@ -234,7 +338,17 @@ def report(reps):
         print(f"  {SHORT[m]:11} " + "  ".join(parts))
 
     print("\n" + "=" * 100)
-    print(f"n={reps} per cell. CV on a {reps}-sample median is indicative, not tight.")
+    # This line used to read "n=5 per cell", taken from --reps rather than from the data.
+    # It was false: the grid ran 5 reps per cell, but earlier 3-rep sweeps of the same
+    # (task, arm, model) were pooled in, so real n runs 5-11 and differs BETWEEN models
+    # within a row. Read the n column, not this footer, and note that a 5-sample and an
+    # 11-sample median are not equally trustworthy.
+    ns = sorted({c["n"] for c in cells.values()})
+    if ns:
+        span = f"{ns[0]}" if len(ns) == 1 else f"{ns[0]}-{ns[-1]}"
+        print(f"n per cell: {span} (see the n column; --reps was {reps}). "
+              f"CV on a median this small is indicative, not tight.")
+    print(f"membership: {provenance}")
     print("No dollar figures: Cortex leaves costMicros unpopulated, so pricing would be")
     print("invented. Tokens are split by tier above -- apply your own rates.")
 
@@ -243,9 +357,20 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--run", action="store_true")
     ap.add_argument("--report", action="store_true")
+    ap.add_argument("--freeze", action="store_true",
+                    help="pin current membership into results/profile-manifest.json")
+    ap.add_argument("--exclude", action="append", default=[], metavar="BASENAME",
+                    help="with --freeze: a run file to leave OUT of the profile "
+                         "(repeatable). The file stays on disk.")
+    ap.add_argument("--all", action="store_true",
+                    help="with --report: ignore the manifest and glob everything")
     ap.add_argument("--reps", type=int, default=5)
     a = ap.parse_args()
+    if a.freeze:
+        freeze(set(a.exclude))
     if a.run:
         run(a.reps)
-    if a.report or not a.run:
-        report(a.reps)
+        print("\nNOTE the manifest is unchanged. To publish these reps, re-pin with:")
+        print("  python3 profile.py --freeze")
+    if a.report or not (a.run or a.freeze):
+        report(a.reps, use_manifest=not a.all)

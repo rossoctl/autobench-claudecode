@@ -1,0 +1,293 @@
+{
+  "note": "Exact inputs to the xlsx cost profile. --report reads only these. Regenerate with `profile.py --freeze` after a deliberate --run.",
+  "excluded": [
+    "cortex-pyfix-001-on-claude-sonnet-4-6-20260909161334.ndjson"
+  ],
+  "files": [
+    {
+      "file": "out/runs-archive/cortex-pyfix-001-20260908151626.ndjson",
+      "rows": 3,
+      "sha256": "6e04785d60268fb79cc99cd0bff444b059b2557b55153ea38ee9b3912b9d19a8"
+    },
+    {
+      "file": "out/runs-archive/cortex-pyfix-001-20260908152441.ndjson",
+      "rows": 3,
+      "sha256": "3cecc6dd9d105c505c9ae793568b6e016e8883900a31490db447ee32903b6a05"
+    },
+    {
+      "file": "out/runs-archive/cortex-pyfix-001-20260908153958.ndjson",
+      "rows": 3,
+      "sha256": "216fd1c29d2a12c99861b6e4a9b4e06e85d3f5bfbf62736c1ab5e465ff0d1698"
+    },
+    {
+      "file": "out/runs-archive/cortex-pyfix-001-on-20260908160004.ndjson",
+      "rows": 1,
+      "sha256": "6308a5847ec07d429abd74f371123e8bf2d83dda250cf501551fc16cef76dca4"
+    },
+    {
+      "file": "out/runs-archive/xlsx-fin-assumption-refs-off-20260908160121.ndjson",
+      "rows": 3,
+      "sha256": "a7397f921bfbad4132e2d58c6aee5ab621d6a6416bbe9bfff3fd57da74150f88"
+    },
+    {
+      "file": "out/runs-archive/xlsx-fin-colors-off-20260908160355.ndjson",
+      "rows": 3,
+      "sha256": "25f41aabf40edd1d6c2a412d85bb50dd7c5d9811d7f871bd1c9bfb289b7e76e1"
+    },
+    {
+      "file": "out/runs-archive/xlsx-fin-colors-on-20260908161951.ndjson",
+      "rows": 3,
+      "sha256": "6127df0bc5280415388e61a68941df721476bdac3dca706d2ce2edaab4f842ab"
+    },
+    {
+      "file": "out/runs-archive/xlsx-fin-font-clean-off-20260908160751.ndjson",
+      "rows": 3,
+      "sha256": "dd905a5c38dd6474fb043de3adf9983616ffff502cfdaf6c30b9c0a975303d36"
+    },
+    {
+      "file": "out/runs-archive/xlsx-fin-font-clean-on-20260908162355.ndjson",
+      "rows": 3,
+      "sha256": "bfb21ef5cc95457421e07d92059e6c608a63262ea1931d8a0a5d1ee1ead2cbf4"
+    },
+    {
+      "file": "out/runs-archive/xlsx-fin-numfmt-off-20260908161055.ndjson",
+      "rows": 3,
+      "sha256": "9256a5f645c7349904a52ff5b9129da1c67a1935b1cd2664e366611138a62ec3"
+    },
+    {
+      "file": "out/runs-archive/xlsx-fin-zeros-negs-off-20260908161531.ndjson",
+      "rows": 3,
+      "sha256": "52dcdd77dbc31596516416324e81fe6020ee1f35cdca62aafe4f6cfdcc607814"
+    },
+    {
+      "file": "out/runs-archive/xlsx-fin-zeros-negs-on-20260908162912.ndjson",
+      "rows": 3,
+      "sha256": "6fa71e040ca71489679dee3443e31c12a296cf2271a1d01d2ab14310d747c4d4"
+    },
+    {
+      "file": "out/runs/cortex-pyfix-001-on-claude-haiku-4-5-20251001-20260908212843.ndjson",
+      "rows": 5,
+      "sha256": "71b090fddaa8cf3870be3d69467eb42962fcabeb66807da40f8506df95c97d79"
+    },
+    {
+      "file": "out/runs/cortex-pyfix-001-on-claude-opus-5-20260908224911.ndjson",
+      "rows": 5,
+      "sha256": "2f595051c9aa4913cca3f4ebe8643e9c56331af7833cf141e330aa7dd3de2da4"
+    },
+    {
+      "file": "out/runs/cortex-pyfix-001-on-claude-sonnet-4-6-20260908165638.ndjson",
+      "rows": 1,
+      "sha256": "ccdbe96782f8707d4f538df65db721fe0c4151fb340ee105e6a4cef2e1f09285"
+    },
+    {
+      "file": "out/runs/cortex-pyfix-001-on-claude-sonnet-4-6-20260908215336.ndjson",
+      "rows": 5,
+      "sha256": "42ea13ce6e2f34221447d28d5373f8cdc4ef0c201c2e3571e6bef7521e70ec33"
+    },
+    {
+      "file": "out/runs/cortex-pyfix-001-on-claude-sonnet-5-20260908221846.ndjson",
+      "rows": 5,
+      "sha256": "636cf8381166e1d418aaaf6f56830ca907788523b4bca068665f9d9c529d9a4f"
+    },
+    {
+      "file": "out/runs/docx-native-bullets-off-claude-sonnet-4-6-20260908171825.ndjson",
+      "rows": 2,
+      "sha256": "9255c7c1a329d7084020e39307e0c4bcaaaac1e952cbd962fec7fc3ee74a94d2"
+    },
+    {
+      "file": "out/runs/docx-native-bullets-on-claude-sonnet-4-6-20260908170936.ndjson",
+      "rows": 1,
+      "sha256": "510bd860d5765ceac6d474eaf2cae6cd556ec859e59f906d62242d2bee90c70c"
+    },
+    {
+      "file": "out/runs/docx-table-dxa-off-claude-sonnet-4-6-20260908171928.ndjson",
+      "rows": 2,
+      "sha256": "cbf91010a6f639f2c28b5d5afc6d3d83042b31b714c97a6153c6b01f383fbaae"
+    },
+    {
+      "file": "out/runs/docx-us-letter-off-claude-sonnet-4-6-20260908172020.ndjson",
+      "rows": 2,
+      "sha256": "2f5f66746b318481cb3c5b7d7d97fa8c8ce52340988e8c010c79183d66893310"
+    },
+    {
+      "file": "out/runs/pptx-body-left-aligned-off-claude-sonnet-4-6-20260908172833.ndjson",
+      "rows": 2,
+      "sha256": "c5d3460c029139ef19a5dd90fb7274c02ffa478a597051ae1092c9480929124a"
+    },
+    {
+      "file": "out/runs/pptx-body-left-aligned-off-claude-sonnet-4-6-20260908175450.ndjson",
+      "rows": 2,
+      "sha256": "353e3c19f82205c866d3b50e157b30212b554df7783ed1eda5c08088296ae6f8"
+    },
+    {
+      "file": "out/runs/pptx-body-left-aligned-on-claude-sonnet-4-6-20260908173700.ndjson",
+      "rows": 3,
+      "sha256": "d5e1406b268524c2df9f9a7738bb24292e2e14b2ae8785ea4e0ab151bff49c0f"
+    },
+    {
+      "file": "out/runs/pptx-body-left-aligned-on-claude-sonnet-4-6-20260908175712.ndjson",
+      "rows": 3,
+      "sha256": "127af910e55a365e577c878e921b09ea3c7e222cded4c6eaf44e5a5b4dab1949"
+    },
+    {
+      "file": "out/runs/pptx-not-text-only-off-claude-sonnet-4-6-20260908173023.ndjson",
+      "rows": 2,
+      "sha256": "a2d02bcc84db3680669ac713c995681b5ece54af26689eb559e02050b1041af1"
+    },
+    {
+      "file": "out/runs/pptx-size-contrast-off-claude-sonnet-4-6-20260908173209.ndjson",
+      "rows": 2,
+      "sha256": "f9b021a8e60b616ff670a4cb3b2279984391184ba99c828544bc2540fbecabd3"
+    },
+    {
+      "file": "out/runs/pptx-size-contrast-off-claude-sonnet-4-6-20260908175553.ndjson",
+      "rows": 2,
+      "sha256": "6fa27b17d418be00b42753ab66801bb3b90d459e24ecc3818fcb8e4760e34dfb"
+    },
+    {
+      "file": "out/runs/pptx-size-contrast-on-claude-sonnet-4-6-20260908174049.ndjson",
+      "rows": 3,
+      "sha256": "78d72cb2aeda2e0ff306f4160f8421ee851c88605a209dbaa0dd4b03a5838cc7"
+    },
+    {
+      "file": "out/runs/pptx-size-contrast-on-claude-sonnet-4-6-20260908181519.ndjson",
+      "rows": 3,
+      "sha256": "5a993d4cf6c78905bde5e5f3833438ca0816156fd969d1815482b1e459cc1226"
+    },
+    {
+      "file": "out/runs/select-deck-select-claude-sonnet-4-6-20260908200240.ndjson",
+      "rows": 3,
+      "sha256": "fd31f6723fe208985a71e4704dfc9a79493fd87110daf1ae498b0d485d61a5ce"
+    },
+    {
+      "file": "out/runs/select-implicit-sheet-select-claude-sonnet-4-6-20260908201805.ndjson",
+      "rows": 3,
+      "sha256": "35b54f0600cf8719bc4a67e7830031d0f26081643c384632fc766ce011345b5e"
+    },
+    {
+      "file": "out/runs/select-none-select-claude-sonnet-4-6-20260908202004.ndjson",
+      "rows": 3,
+      "sha256": "02b6fba63e9d8f44092e5117f22597b68db1ef2a509a37d4ed9e39a5d05e158d"
+    },
+    {
+      "file": "out/runs/select-spreadsheet-select-claude-sonnet-4-6-20260908194150.ndjson",
+      "rows": 1,
+      "sha256": "a96e3e401cc7402fda3bdd0c1e886e444eac99c51955fa3b7734d8f6ace83dc2"
+    },
+    {
+      "file": "out/runs/select-spreadsheet-select-claude-sonnet-4-6-20260908202112.ndjson",
+      "rows": 3,
+      "sha256": "afd4283deb6ef1a817d32a91d78b7850d6fb4e18377d96b02496ef6770596142"
+    },
+    {
+      "file": "out/runs/xlsx-fin-colors-off-claude-haiku-4-5-20251001-20260908212141.ndjson",
+      "rows": 5,
+      "sha256": "7729fafc83bd6de333c39c526c414f6b35afb0fd63560eb600538213c726eed5"
+    },
+    {
+      "file": "out/runs/xlsx-fin-colors-off-claude-opus-5-20260908223041.ndjson",
+      "rows": 5,
+      "sha256": "51794c1b9bde02bd2b3e34f86dd589856c6ea43fd117a0a1644171e3bd1dc966"
+    },
+    {
+      "file": "out/runs/xlsx-fin-colors-off-claude-sonnet-4-6-20260908213724.ndjson",
+      "rows": 5,
+      "sha256": "452ffb51e1b4873cea6f23f5639b8e1acdd9444e6fbce43abf8d6f8714f47f64"
+    },
+    {
+      "file": "out/runs/xlsx-fin-colors-off-claude-sonnet-5-20260908193933.ndjson",
+      "rows": 3,
+      "sha256": "93b292ba34464f2209e6729c379938d907a75cded1b6983e87b03f9ebb93cfe6"
+    },
+    {
+      "file": "out/runs/xlsx-fin-colors-off-claude-sonnet-5-20260908220255.ndjson",
+      "rows": 5,
+      "sha256": "8d2ec6aadcd463281d668880c3b1489883ffb97d718c37118bd7910db29cfe83"
+    },
+    {
+      "file": "out/runs/xlsx-fin-colors-on-claude-haiku-4-5-20251001-20260908211812.ndjson",
+      "rows": 5,
+      "sha256": "7ca7188e182d12ec45b772e3a6ae875b382ee99f835a8b6ff18f0172c1138d8e"
+    },
+    {
+      "file": "out/runs/xlsx-fin-colors-on-claude-opus-5-20260908222108.ndjson",
+      "rows": 5,
+      "sha256": "40e6b5bb2df078f4d6716772e5719076e2c712311554856a49a76b67ef355a79"
+    },
+    {
+      "file": "out/runs/xlsx-fin-colors-on-claude-sonnet-4-6-20260908165732.ndjson",
+      "rows": 1,
+      "sha256": "d5da00be6628c0a3c28aba76a767178a8116e4e5a5f5345fa474a815cb53f40b"
+    },
+    {
+      "file": "out/runs/xlsx-fin-colors-on-claude-sonnet-4-6-20260908213059.ndjson",
+      "rows": 5,
+      "sha256": "b24433fa827a9ee8b337690f1c58d2d5f38306823761570182a4ef87b53f9391"
+    },
+    {
+      "file": "out/runs/xlsx-fin-colors-on-claude-sonnet-5-20260908194410.ndjson",
+      "rows": 3,
+      "sha256": "16426fed7fa7e53ab0192a13c2d55516e09cc001f4093e84c5340b9fc1bb783c"
+    },
+    {
+      "file": "out/runs/xlsx-fin-colors-on-claude-sonnet-5-20260908215537.ndjson",
+      "rows": 5,
+      "sha256": "652bfe507ed17a048285c3de8192649eb73c9d98dfdcc96eb0a109e0dd21c849"
+    },
+    {
+      "file": "out/runs/xlsx-fin-font-clean-off-claude-haiku-4-5-20251001-20260908212706.ndjson",
+      "rows": 5,
+      "sha256": "5e6d0c56f07dabaf09b4cf0d2ef1613d7af05b1a804c8b03b2008ae434933376"
+    },
+    {
+      "file": "out/runs/xlsx-fin-font-clean-off-claude-opus-5-20260908224253.ndjson",
+      "rows": 5,
+      "sha256": "1f3446f40dbece473d69846fdd592c21e05f20f3e48398c415c0be4a80a3579b"
+    },
+    {
+      "file": "out/runs/xlsx-fin-font-clean-off-claude-sonnet-4-6-20260908214914.ndjson",
+      "rows": 5,
+      "sha256": "e7eca61472069824495af7e86902ba3170f0afb9439b0dbf69ba8ca8ae143259"
+    },
+    {
+      "file": "out/runs/xlsx-fin-font-clean-off-claude-sonnet-5-20260908194144.ndjson",
+      "rows": 3,
+      "sha256": "1191490099ca0eed27bc3327004978506727161069c6716019dc78abfa2bdc6f"
+    },
+    {
+      "file": "out/runs/xlsx-fin-font-clean-off-claude-sonnet-5-20260908195245.ndjson",
+      "rows": 3,
+      "sha256": "d3c98f4a4990617f30668dbc79a9066716eeaf84f8e0bc62208554d3f7a45fbf"
+    },
+    {
+      "file": "out/runs/xlsx-fin-font-clean-off-claude-sonnet-5-20260908221241.ndjson",
+      "rows": 5,
+      "sha256": "f4476d7a05e29f33c68e9dc460e09582ad337f0bbc7b7bd24810855dc6c6ce27"
+    },
+    {
+      "file": "out/runs/xlsx-fin-font-clean-on-claude-haiku-4-5-20251001-20260908212324.ndjson",
+      "rows": 5,
+      "sha256": "ca8907c30d2d7d2fe9f5f38e961555d32a496d68b9411077167093129070080a"
+    },
+    {
+      "file": "out/runs/xlsx-fin-font-clean-on-claude-opus-5-20260908223705.ndjson",
+      "rows": 5,
+      "sha256": "960aba819557144d299930f8cf815be4d30654588d684c9b0cd84f9e96c311f0"
+    },
+    {
+      "file": "out/runs/xlsx-fin-font-clean-on-claude-sonnet-4-6-20260908214250.ndjson",
+      "rows": 5,
+      "sha256": "d932f6c2ab948164df326ce4f54e588227b44bb772d8efefaeb8abe814d23613"
+    },
+    {
+      "file": "out/runs/xlsx-fin-font-clean-on-claude-sonnet-5-20260908194834.ndjson",
+      "rows": 3,
+      "sha256": "69b740931cf288bc1af0a0d8bda4a41d5d963412d90f01798279cd6965a42f93"
+    },
+    {
+      "file": "out/runs/xlsx-fin-font-clean-on-claude-sonnet-5-20260908220654.ndjson",
+      "rows": 5,
+      "sha256": "a89382160b44d51f4578ab279eee6b27f95cbdea771a487206be6b0f30012506"
+    }
+  ]
+}

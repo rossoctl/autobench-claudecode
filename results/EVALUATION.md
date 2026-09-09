@@ -67,7 +67,7 @@ These were conflated early in the work and are kept strictly separate.
 | **Task** | One unit of work: `prompt.md` + a fresh `workspace/`, optionally a hidden `verdict/`. |
 | **Verdict** | The programmatic pass test. A command's exit code — never a model's opinion. |
 | **Arm** | A condition applied to a task. `off` = skill unavailable (control), `on` = skill available and explicitly invoked, `select` = all skills available, none named. |
-| **Cell** | One (task × arm × model) combination, measured over *n* repetitions. `xlsx-fin-colors` / `on` / `sonnet-5` at n=5 is one cell. The profile has 5 (task, arm) pairs × 4 models = **20 cells**. |
+| **Cell** | One (task × arm × model) combination, measured over *n* repetitions. `xlsx-fin-colors` / `on` / `sonnet-5` is one cell (n=8). The profile has 5 (task, arm) pairs × 4 models = **20 cells**. |
 | **Repetition** (= one task run) | One headless `claude -p` invocation in a fresh workspace. |
 | **LLM call** | One `/v1/chat/completions` request/response on the wire. **A single task makes several** — 5 to 24 in these runs — each re-sending the growing conversation. |
 | **Compliance task** | Asks for ordinary work; the hidden verdict checks whether a *skill convention* was followed. |
@@ -461,8 +461,13 @@ are not tight — see limitations.
 
 1. **One skill.** Every skill-specific conclusion rests on `xlsx`. Whether "the skill is free
    on opus-5" is an opus property or an xlsx property is currently indistinguishable.
-2. **n=5 per cell**, some CVs up to 0.85. The tokens-per-LLM-call constants are trustworthy because
-   they reproduce across five independent cells; individual cost figures are indicative.
+2. **n=5–10 per cell, unevenly** — some CVs up to 0.85. The deliberate grid ran 5 reps per cell,
+   but earlier 3-rep sweeps of the same (task, arm, model) were pooled in, so *n* varies between
+   models within a row: read the `n` column rather than assuming 5. A 5-sample and a 10-sample
+   median are not equally trustworthy, and the unevenness is not by design — it is a consequence
+   of the profile having globbed the run directories, now pinned in `results/profile-manifest.json`.
+   The tokens-per-LLM-call constants are trustworthy because they reproduce across five
+   independent cells; individual cost figures are indicative.
 3. **Cache billing unverified** — the largest single uncertainty (4–5× on absolute cost),
    though it does not change any ranking.
 4. **Two tasks in one narrow genre.** Both discriminators are financial-spreadsheet
@@ -483,11 +488,19 @@ premium.
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 abctl service start                       # Cortex, forward + tls_bridge
+python3 -m pytest -q                      # the harness's own tests (confound detector)
+python3 tools/negcontrol_confound.py      # prove the detector fires; exits non-zero if not
 python3 profile.py --run --reps 5         # the grid (~2.5 h, 100 invocations)
-python3 profile.py --report               # recompile, no invocations
+python3 profile.py --freeze               # pin exactly which reps the profile is built from
+python3 profile.py --report               # recompile from the manifest, no invocations
 python3 pricing.py                        # the rate card
 ```
 
-Raw per-repetition records are in the gitignored `out/runs/`. `profile.py --report` asserts
-two token identities per cell — `prompt == uncached + cacheRead + cacheWrite` and
-`total == prompt + completion` — and quarantines any cell that fails them. None did.
+Raw per-repetition records are in the gitignored `out/runs/` and `out/runs-archive/`. Which of
+them belong to this profile is pinned in `results/profile-manifest.json` (58 files, 193
+repetitions, with a sha256 each) — `--report` reads only those and says so loudly if one went
+missing or changed. Membership used to be a glob of both directories, which meant any later
+harness invocation silently joined a published cell; a one-rep canary on 2026-09-09 did exactly
+that and moved a median. `--report` also asserts two token identities per cell —
+`prompt == uncached + cacheRead + cacheWrite` and `total == prompt + completion` — and
+quarantines any cell that fails them. None did, across all 193 repetitions.

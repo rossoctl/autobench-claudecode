@@ -269,7 +269,7 @@ tb(s, "These were conflated early in the work; they are kept strictly separate."
 rows = [["term", "meaning"],
         ["Harness", "the whole apparatus: tasks + driver + verdict + Cortex"],
         ["Arm", "off = skill unavailable (control) · on = skill invoked · select = none named"],
-        ["Cell", "one (task × arm × model), measured over n repetitions — e.g. xlsx-fin-colors / ON / sonnet-5, n=5"],
+        ["Cell", "one (task × arm × model), measured over n repetitions — e.g. xlsx-fin-colors / ON / sonnet-5, n=8"],
         ["Task / repetition", "ONE headless `claude -p` invocation in a fresh workspace"],
         ["LLM call", "ONE /v1/chat/completions on the wire. A task makes SEVERAL — 5 to 24 here"],
         ["Compliance task", "ordinary request; hidden verdict checks a skill convention was followed"],
@@ -572,7 +572,7 @@ box(s, "NOT INDICATED HERE\n\nclaude-opus-5\n\nMost expensive in all three cells
       "advantage. Genuinely the most\ntoken-efficient and the only model\nto solve a task unaided — may earn\nits premium on harder work.",
     8.9, 2.0, 3.7, 2.85, fill=RGBColor(0xFF, 0xFF, 0xFF), size=12, color=BODY)
 tb(s, "Confidence: the pass-rate and cost orderings hold across BOTH pricing scenarios, and tokens/call holds across five\n"
-      "independent cells. Absolute dollar figures are indicative — n=5, and cache billing is unverified.",
+      "independent cells. Absolute dollar figures are indicative — n=5–10 per cell, and cache billing is unverified.",
    0.7, 5.1, 11.9, 0.7, 13, color=ICE)
 
 # ─────────────────────────────────────────────────────────── 15. limitations
@@ -580,7 +580,7 @@ s = prs.slides.add_slide(BLANK); bg(s, PAPER)
 slide_title(s, "Limitations, stated plainly", "what would change the conclusion")
 rows = [["limitation", "consequence"],
         ["One skill (xlsx)", "every skill-specific conclusion is xlsx-specific; “free on opus-5” may be an xlsx property"],
-        ["n = 5 per cell, some CV to 0.85", "tokens/call constants are solid (5 cells agree); individual dollar figures are indicative"],
+        ["n = 5–10 per cell (uneven), some CV to 0.85", "read the n column, not a single number; tokens/call constants are solid (5 cells agree), individual dollar figures indicative"],
         ["Cache billing unverified", "largest single uncertainty — 4–5× on ABSOLUTE cost, but changes no ranking"],
         ["Two tasks, one narrow genre", "financial-spreadsheet formatting. Not a general coding benchmark"],
         ["aws/ vs bare alias pricing", "assumed identical; unprovable with a non-admin key"],

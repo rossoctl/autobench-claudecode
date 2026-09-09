@@ -82,6 +82,7 @@ Cache-read share of prompt tokens (how much context is re-read)
   opus-5      xlsx-fin-color/on=95%  xlsx-fin-color/off=97%  xlsx-fin-font-/on=95%  xlsx-fin-font-/off=97%  cortex-pyfix-0/on=95%
 
 ====================================================================================================
-n=5 per cell. CV on a 5-sample median is indicative, not tight.
+n per cell: 5-10 (see the n column; --reps was 5). CV on a median this small is indicative, not tight.
+membership: frozen manifest: 57 files, 1 deliberately excluded
 No dollar figures: Cortex leaves costMicros unpopulated, so pricing would be
 invented. Tokens are split by tier above -- apply your own rates.
