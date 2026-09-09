@@ -394,8 +394,12 @@ def run_rep(task, rep, cfg_dir, model=DEFAULT_MODEL, arm="on", timeout=1800):
     tests_untouched = before_tests == after_tests
     if task.get("verdict"):
         # Arrives only now, so it cannot be read or tampered with by the agent.
-        for item in task["verdict"].iterdir():
-            shutil.copy2(item, pathlib.Path(ws) / item.name)
+        # copytree + IGNORE for the same reason as fresh_ws: running the verdict tests by
+        # hand leaves a __pycache__/ inside verdict/, and a flat per-entry copy2 dies on it
+        # with IsADirectoryError. That is exactly what happened on 2026-09-09, killing a
+        # 25-rep opus run at rep 1 -- the lesson was documented in fresh_ws and never
+        # applied here, 140 lines away.
+        shutil.copytree(task["verdict"], ws, ignore=IGNORE, dirs_exist_ok=True)
     rc1, tail1, out1 = pytest_run(ws)
     # "no artifact produced" is NOT the same failure as "artifact is non-compliant".
     # The first means the agent could not do the work at all -- e.g. its skill mandates a
