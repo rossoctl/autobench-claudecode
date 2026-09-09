@@ -150,6 +150,36 @@ Selection is reliable, including the implicit case and with no false positives. 
 consequence: these four tasks are now **too easy to discriminate anything**, so extending
 this arm means genuinely ambiguous prompts, not more clear ones.
 
+## Deliverables
+
+| Document | Contents |
+|---|---|
+| [`results/EVALUATION.md`](results/EVALUATION.md) | Full evaluation: terms, setup + rationale, pricing, methodology, all findings, model recommendation, limitations |
+| [`results/autobench-claudecode-summary.pptx`](results/autobench-claudecode-summary.pptx) | 14-slide summary of the same material (regenerate: `tools/make_summary_deck.py`) |
+| [`results/xlsx-cost-profile-20260908.txt`](results/xlsx-cost-profile-20260908.txt) | Raw compiled profile output |
+
+### Monetary cost
+
+`pricing.py` holds the internal LiteLLM rate card, transcribed from the gateway UI —
+`/model/info` returns 403 for a non-admin key, so it could not be pulled programmatically.
+
+| Benchmarked alias | Input $/1M | Output $/1M |
+|---|---|---|
+| `claude-haiku-4-5-20251001` | 0.76 | 3.80 |
+| `claude-sonnet-4-6` | 2.28 | 11.40 |
+| `claude-sonnet-5` | **1.52** | **7.60** |
+| `claude-opus-5` | 3.80 | 19.00 |
+
+`sonnet-5` is priced at **2/3 of `sonnet-4-6`**, which is why it wins on cost despite using
+more tokens. `opus-5` is 2.5× `sonnet-5`.
+
+**Cache pricing is the one unverified input.** The gateway publishes only Input and Output
+rates while 81–97% of our prompt tokens are cache reads, so two scenarios are computed: **A**
+bills every prompt token at the Input rate (upper bound), **B** applies the standard
+`cacheRead ×0.10 / cacheWrite ×1.25` convention. B lands ~4–5× below A. **The model ranking
+is identical under both**, so conclusions do not depend on resolving it — but confirm against
+an invoice before quoting an absolute figure.
+
 ## Comparing models
 
 Pin with `--model`; the pin is verified against what Cortex saw on the wire. `profile.py`
