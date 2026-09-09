@@ -28,6 +28,7 @@ FONT = "Arial"
 prs = Presentation()
 prs.slide_width, prs.slide_height = Inches(13.333), Inches(7.5)
 BLANK = prs.slide_layouts[6]
+DARK_SLIDES = set()   # 1-based indices with a dark background
 
 
 def bg(slide, color):
@@ -58,10 +59,16 @@ def tb(slide, text, l, t, w, h, size, *, color=BODY, bold=False, align=PP_ALIGN.
 
 
 def slide_title(slide, title, kicker=None):
+    """Kicker + title + accent rule.
+
+    At 30pt across 11.9in roughly 52 characters fit on one line. A longer title wraps and
+    the accent rule then strikes through the second line, so the rule is pushed down.
+    """
     if kicker:
         tb(slide, kicker.upper(), 0.7, 0.45, 11.9, 0.3, 11, color=MUTED, bold=True)
     tb(slide, title, 0.7, 0.75, 11.9, 0.8, 30, color=INK, bold=True)
-    ln = slide.shapes.add_shape(1, Inches(0.7), Inches(1.62), Inches(1.1), Inches(0.05))
+    accent_y = 1.62 if len(title) <= 52 else 2.08
+    ln = slide.shapes.add_shape(1, Inches(0.7), Inches(accent_y), Inches(1.1), Inches(0.05))
     ln.fill.solid(); ln.fill.fore_color.rgb = ICE; ln.line.fill.background()
     ln.shadow.inherit = False
 
@@ -116,20 +123,62 @@ def arrow(slide, x1, y1, x2, y2, *, color=INK, label=None):
     c = slide.shapes.add_connector(2, Inches(x1), Inches(y1), Inches(x2), Inches(y2))
     c.line.color.rgb = color; c.line.width = Pt(1.75)
     if label:
-        tb(slide, label, (x1 + x2) / 2 - 0.75, (y1 + y2) / 2 - 0.28, 1.6, 0.25, 10,
+        w = min(1.5, max(0.55, abs(x2 - x1) - 0.06)) if abs(x2 - x1) > 0.2 else 1.2
+        tb(slide, label, (x1 + x2) / 2 - w / 2, (y1 + y2) / 2 - 0.3, w, 0.25, 10,
            color=MUTED, align=PP_ALIGN.CENTER)
     return c
 
 
 # ─────────────────────────────────────────────────────────── 1. title
-s = prs.slides.add_slide(BLANK); bg(s, INK)
+s = prs.slides.add_slide(BLANK); bg(s, INK); DARK_SLIDES.add(len(prs.slides._sldIdLst))
 tb(s, "Benchmarking Claude Code", 0.9, 2.1, 11.5, 1.1, 46, color=RGBColor(0xFF, 0xFF, 0xFF), bold=True)
 tb(s, "Cost, skill effect and model selection — measured, priced, and where it\nsurprised us",
    0.9, 3.4, 11.0, 1.0, 20, color=ICE)
 tb(s, "193 recorded repetitions  ·  4 models  ·  internal LiteLLM  ·  2026-09-09",
    0.9, 5.9, 11.0, 0.4, 13, color=RGBColor(0x9A, 0xB0, 0xD8))
 
-# ─────────────────────────────────────────────────────────── 2. what this is
+# ─────────────────────────────────────────────────────────── 2. table of contents
+s = prs.slides.add_slide(BLANK); bg(s, PAPER)
+slide_title(s, "Contents", "table of contents")
+# Two columns: a single column ran the last section into the footnote.
+SECTIONS = [
+    ("Setup and method", [
+        ("3", "What is being measured"),
+        ("4", "Terms in use"),
+        ("5", "Benchmarking setup — architecture"),
+        ("6", "Why this shape — rationale per decision"),
+        ("7", "How a task earns its place — 9 of 11 discarded"),
+    ]),
+    ("Pricing", [
+        ("8", "Model pricing — internal LiteLLM rate card"),
+    ]),
+    ("Findings", [
+        ("9", "A prediction of ours that was falsified"),
+        ("10", "Token cost splits into two factors"),
+        ("11", "Money reverses the token conclusion"),
+        ("12", "Skill cost is a property of skill × model"),
+        ("13", "Skill selection is reliable"),
+    ]),
+    ("Conclusion", [
+        ("14", "Model selection recommendation"),
+        ("15", "Limitations, stated plainly"),
+    ]),
+]
+COLS = [(0.7, SECTIONS[:2]), (6.9, SECTIONS[2:])]
+for x, groups in COLS:
+    y = 2.05
+    for section, items in groups:
+        tb(s, section.upper(), x, y, 5.4, 0.3, 12, color=INK, bold=True)
+        y += 0.4
+        for num, label in items:
+            tb(s, num, x, y, 0.5, 0.3, 14, color=ICE, bold=True, align=PP_ALIGN.RIGHT)
+            tb(s, label, x + 0.7, y, 4.9, 0.3, 14, color=BODY)
+            y += 0.38
+        y += 0.3
+tb(s, "Every figure in this deck also appears in results/EVALUATION.md, which carries the full detail\n"
+      "and the reproduction steps.", 0.7, 6.4, 11.9, 0.6, 12, color=MUTED)
+
+# ─────────────────────────────────────────────────────────── 3. what this is
 s = prs.slides.add_slide(BLANK); bg(s, PAPER)
 slide_title(s, "What is being measured", "scope")
 tb(s, "The subject under test is the Claude Code agent itself — not a model in isolation.",
@@ -146,7 +195,7 @@ table(s, rows, 0.7, 2.5, 11.9, [3.0, 8.9], size=14)
 tb(s, "No LLM judge is the load-bearing choice: without a programmatic verdict this is a\n"
       "load generator, not a benchmark.", 0.7, 5.6, 11.9, 0.7, 14, color=WARN, bold=True)
 
-# ─────────────────────────────────────────────────────────── 3. terms
+# ─────────────────────────────────────────────────────────── 4. terms
 s = prs.slides.add_slide(BLANK); bg(s, PAPER)
 slide_title(s, "Terms in use", "vocabulary")
 tb(s, "These were conflated early in the work; they are kept strictly separate.",
@@ -163,7 +212,7 @@ table(s, rows, 0.7, 2.45, 11.9, [2.6, 9.3], size=13)
 tb(s, "‘workload-harness’ (hyphenated) is a proper noun for an unrelated upstream project — never used here as a common noun.",
    0.7, 5.35, 11.9, 0.3, 12, color=MUTED)
 
-# ─────────────────────────────────────────────────────────── 4. setup diagram
+# ─────────────────────────────────────────────────────────── 5. setup diagram
 s = prs.slides.add_slide(BLANK); bg(s, PAPER)
 slide_title(s, "Benchmarking setup", "architecture")
 box(s, "harness.py\ndriver · run lock", 0.7, 2.0, 2.3, 0.95, fill=INK,
@@ -173,27 +222,31 @@ box(s, "hidden verdict/\ninstalled AFTER exit", 0.7, 4.35, 2.3, 0.8, fill=RGBCol
 box(s, "claude -p\nheadless child\nstream-json", 3.75, 2.0, 2.4, 1.35, fill=ICE, size=13, bold=True)
 box(s, "clean child env\nHTTPS_PROXY · NODE_EXTRA_CA_CERTS\nCLAUDE_CONFIG_DIR · --model",
     3.4, 3.65, 3.1, 1.0, fill=RGBColor(0xFF, 0xFF, 0xFF), size=10)
-box(s, "Cortex\nforward proxy + tls_bridge\ninference-parser", 7.0, 2.0, 2.7, 1.35, fill=ICE, size=12, bold=True)
-box(s, "SSE /v1/events → disk\n(upstream TTL is 30 min)", 7.0, 3.65, 2.7, 0.8,
-    fill=RGBColor(0xFF, 0xFF, 0xFF), size=10)
+box(s, "Cortex (local service)\nforward proxy + tls_bridge\ndecrypts, then inference-parser",
+    7.0, 2.0, 2.7, 1.35, fill=ICE, size=11, bold=True)
+box(s, "Server-Sent Events stream\nGET /v1/events → disk\n(store is in-memory, 30-min TTL)",
+    7.0, 3.65, 2.7, 0.85, fill=RGBColor(0xFF, 0xFF, 0xFF), size=9.5)
 box(s, "LiteLLM\ngateway", 10.5, 2.0, 1.9, 0.95, fill=INK, color=RGBColor(0xFF, 0xFF, 0xFF), size=13, bold=True)
 box(s, "model", 10.5, 3.3, 1.9, 0.6, fill=RGBColor(0xFF, 0xFF, 0xFF), size=12)
 arrow(s, 3.0, 2.47, 3.75, 2.47, label="spawn")
 # the left-hand boxes are steps the driver performs; connect them or they read as floating
 arrow(s, 1.85, 2.95, 1.85, 3.25)
 arrow(s, 1.85, 4.05, 1.85, 4.35)
-arrow(s, 6.15, 2.67, 7.0, 2.67, label="HTTPS")
-arrow(s, 9.7, 2.47, 10.5, 2.47)
+arrow(s, 6.15, 2.67, 7.0, 2.67, label="CONNECT")
+arrow(s, 9.7, 2.47, 10.5, 2.47, label="HTTPS")
 arrow(s, 11.45, 2.95, 11.45, 3.3)
 arrow(s, 4.95, 3.35, 4.95, 3.65)
 arrow(s, 8.35, 3.35, 8.35, 3.65)
 box(s, "one NDJSON row per repetition   ·   whitelisted fields only, never raw prompts",
     0.7, 5.55, 11.7, 0.55, fill=RGBColor(0xFF, 0xFF, 0xFF), size=13, bold=True, color=INK)
-tb(s, "Three measurement sources, because none can answer another’s question: the verdict says whether it worked,\n"
-      "Cortex says what it cost, the transcript says which tools and skills actually ran.",
-   0.7, 6.3, 11.9, 0.6, 13, color=MUTED)
+tb(s, "Three measurement sources, because none can answer another’s question: the verdict says whether it worked, Cortex says what\n"
+      "it cost, the transcript says which tools and skills actually ran.\n"
+      "Transport: HTTPS_PROXY is named “https” but its value is http://127.0.0.1:47600 — the hop to the local Cortex service is plaintext\n"
+      "HTTP CONNECT on loopback. tls_bridge then terminates TLS with its own CA (hence NODE_EXTRA_CA_CERTS) so the request can be\n"
+      "parsed, and Cortex makes the real HTTPS connection outbound to the gateway.",
+   0.7, 6.15, 12.2, 1.0, 11.5, color=MUTED, spacing=1)
 
-# ─────────────────────────────────────────────────────────── 5. rationale
+# ─────────────────────────────────────────────────────────── 6. rationale
 s = prs.slides.add_slide(BLANK); bg(s, PAPER)
 slide_title(s, "Why this shape", "rationale")
 rows = [["decision", "rationale — each one was measured, not assumed"],
@@ -205,7 +258,7 @@ rows = [["decision", "rationale — each one was measured, not assumed"],
         ["Whitelisted artefacts", "Cortex events carry full prompts and completions on an unauthenticated API"]]
 table(s, rows, 0.7, 2.0, 11.9, [3.2, 8.7], size=12)
 
-# ─────────────────────────────────────────────────────────── 6. task admission
+# ─────────────────────────────────────────────────────────── 7. task admission
 s = prs.slides.add_slide(BLANK); bg(s, PAPER)
 slide_title(s, "How a task earns its place", "methodology")
 tb(s, "9 of the first 11 tasks written were discarded. A discarded task is a result.",
@@ -226,7 +279,7 @@ rows = [["rule kind", "example", "outcome"],
 table(s, rows, 0.7, 5.0, 11.9, [3.1, 6.4, 2.4], size=12,
       highlight={(1, 2): GOOD, (2, 2): WARN, (3, 2): WARN})
 
-# ─────────────────────────────────────────────────────────── 7. pricing
+# ─────────────────────────────────────────────────────────── 8. pricing
 s = prs.slides.add_slide(BLANK); bg(s, PAPER)
 slide_title(s, "Model pricing — internal LiteLLM", "rate card, 2026-09-09")
 rows = [["benchmarked alias", "gateway entry", "input $/1M", "output $/1M", "vs sonnet-5"],
@@ -246,7 +299,7 @@ tb(s, "The gateway publishes only Input and Output rates, but 81–97% of our pr
       "The model ranking is identical under both, so the recommendation does not depend on resolving it.",
    0.7, 4.85, 11.9, 1.5, 13, color=BODY, spacing=3)
 
-# ─────────────────────────────────────────────────────────── 8. finding: falsified
+# ─────────────────────────────────────────────────────────── 9. finding: falsified
 s = prs.slides.add_slide(BLANK); bg(s, PAPER)
 slide_title(s, "A prediction of ours that was falsified", "finding 1 · pass rate")
 tb(s, "We argued a compliance task cannot rank models: the OFF arm is pinned at 0 by the pre-screen and the ON\n"
@@ -262,25 +315,28 @@ table(s, rows, 0.7, 2.85, 11.9, [2.4, 4.8, 4.7], size=14,
 box(s, "“The measure is saturated” is a claim about the models you happened to test —\nnot a claim about the task.",
     0.7, 4.9, 11.7, 0.95, fill=INK, color=RGBColor(0xFF, 0xFF, 0xFF), size=16, bold=True)
 
-# ─────────────────────────────────────────────────────────── 9. finding: decomposition
+# ─────────────────────────────────────────────────────────── 10. finding: decomposition
 s = prs.slides.add_slide(BLANK); bg(s, PAPER)
-slide_title(s, "One token term is a model constant; the other is not", "finding 2 · decomposition")
-tb(s, "tokens/call ratio vs sonnet-4-6, across five structurally different cells",
-   0.7, 1.95, 11.9, 0.3, 14, color=MUTED)
+slide_title(s, "Two factors drive token cost", "finding 2 · decomposition")
+box(s, "total tokens   =   tokens per call   ×   number of calls\n"
+      "                       (a MODEL property)        (a TASK property)",
+    0.7, 1.9, 11.7, 0.75, fill=RGBColor(0xFF, 0xFF, 0xFF), size=15, bold=True, color=INK)
+tb(s, "Factor 1 — tokens per call: ratio vs sonnet-4-6, across five structurally different cells",
+   0.7, 2.8, 11.9, 0.3, 14, color=MUTED)
 rows = [["model", "range", "spread", "reading"],
         ["haiku-4-5", "0.97 – 1.05", "0.07", "≈ same per-call context"],
         ["sonnet-5", "1.19 – 1.30", "0.11", "≈1.23× more per call"],
         ["opus-5", "0.89 – 0.97", "0.08", "≈0.90× — leaner per call"]]
-table(s, rows, 0.7, 2.4, 11.9, [2.4, 2.6, 1.7, 5.2], size=14, highlight={(3, 3): GOOD})
-tb(s, "Call count is NOT constant — 0.40–1.00× for haiku, 0.83–2.00× for opus-5 depending on the task.",
-   0.7, 3.9, 11.9, 0.35, 15, color=WARN, bold=True)
-box(s, "So decompose: the stable term is the MODEL, the variable term is the WORK.\n"
-      "Reporting raw token totals conflates them.",
-    0.7, 4.45, 11.7, 0.85, fill=RGBColor(0xFF, 0xFF, 0xFF), size=15, bold=True, color=INK)
+table(s, rows, 0.7, 3.2, 11.9, [2.4, 2.6, 1.7, 5.2], size=14, highlight={(3, 3): GOOD})
+tb(s, "Factor 2 — number of calls: NOT constant. 0.40–1.00× for haiku, 0.83–2.00× for opus-5, by task.",
+   0.7, 4.7, 11.9, 0.35, 15, color=WARN, bold=True)
+box(s, "So a model has a stable per-call appetite you can budget with — but how many calls it\n"
+      "takes depends on the job. A raw token total multiplies the two and hides both.",
+    0.7, 5.15, 11.7, 0.85, fill=RGBColor(0xFF, 0xFF, 0xFF), size=14, bold=True, color=INK)
 tb(s, "Cache reads are 81–97% of prompt tokens in every cell — highest on sonnet-5 and opus-5. Reporting\n"
-      "“input tokens” alone for this workload is meaningless.", 0.7, 5.5, 11.9, 0.6, 13, color=MUTED)
+      "“input tokens” alone for this workload is meaningless.", 0.7, 6.15, 11.9, 0.6, 13, color=MUTED)
 
-# ─────────────────────────────────────────────────────────── 10. finding: money
+# ─────────────────────────────────────────────────────────── 11. finding: money
 s = prs.slides.add_slide(BLANK); bg(s, PAPER)
 slide_title(s, "Money reverses the token conclusion", "finding 3 · cost per solved task")
 tb(s, "$ per SOLVED task (scenario B). Cost per solved = median tokens ÷ pass rate, so failures are charged.",
@@ -308,7 +364,7 @@ table(s, rows_a, 0.7, 5.7, 11.9, [3.9, 2.0, 2.0, 2.0, 2.0], size=12,
 tb(s, "haiku's 0.1075 already charges it for a 0.40 pass rate — it is cheapest even after paying for its failures.",
    0.7, 3.7, 11.9, 0.3, 12, color=WARN)
 
-# ─────────────────────────────────────────────────────────── 11. finding: skill overhead
+# ─────────────────────────────────────────────────────────── 12. finding: skill overhead
 s = prs.slides.add_slide(BLANK); bg(s, PAPER)
 slide_title(s, "Skill cost is a property of skill × model", "finding 4 · overhead")
 tb(s, "skill-on ÷ skill-off tokens, same skill (xlsx), same tasks", 0.7, 1.95, 11.9, 0.3, 14, color=MUTED)
@@ -324,7 +380,7 @@ tb(s, "opus-5 absorbs the skill for free (0.93× / 1.01×) — largely because i
       "currently indistinguishable — three more tasks on docx / pptx / pdf would separate them.",
    0.7, 4.1, 11.9, 1.6, 14, color=BODY, spacing=4)
 
-# ─────────────────────────────────────────────────────────── 12. selection
+# ─────────────────────────────────────────────────────────── 13. selection
 s = prs.slides.add_slide(BLANK); bg(s, PAPER)
 slide_title(s, "Skill selection is reliable", "finding 5 · selection")
 tb(s, "All four candidate skills present, prompt names none, verdict read from the transcript.\n"
@@ -344,8 +400,8 @@ box(s, "Only here is the transcript authoritative: a MODEL-SELECTED skill is a r
       "whereas an explicit /skill-name is expanded client-side and never appears in the transcript at all.",
     0.7, 5.35, 11.7, 0.95, fill=RGBColor(0xFF, 0xFF, 0xFF), size=13, color=INK)
 
-# ─────────────────────────────────────────────────────────── 13. recommendation
-s = prs.slides.add_slide(BLANK); bg(s, INK)
+# ─────────────────────────────────────────────────────────── 14. recommendation
+s = prs.slides.add_slide(BLANK); bg(s, INK); DARK_SLIDES.add(len(prs.slides._sldIdLst))
 tb(s, "Model selection recommendation", 0.7, 0.6, 11.9, 0.7, 32,
    color=RGBColor(0xFF, 0xFF, 0xFF), bold=True)
 tb(s, "on the benchmark evidence, for skill-driven document work", 0.7, 1.35, 11.9, 0.35, 14, color=ICE)
@@ -363,7 +419,7 @@ tb(s, "Confidence: the pass-rate and cost orderings hold across BOTH pricing sce
       "independent cells. Absolute dollar figures are indicative — n=5, and cache billing is unverified.",
    0.7, 5.1, 11.9, 0.7, 13, color=ICE)
 
-# ─────────────────────────────────────────────────────────── 14. limitations
+# ─────────────────────────────────────────────────────────── 15. limitations
 s = prs.slides.add_slide(BLANK); bg(s, PAPER)
 slide_title(s, "Limitations, stated plainly", "what would change the conclusion")
 rows = [["limitation", "consequence"],
@@ -380,6 +436,14 @@ tb(s, "If the gateway does NOT discount cache reads, absolute costs rise ~4–5�
    0.7, 4.5, 11.9, 1.0, 13, color=BODY)
 tb(s, "Full detail, every figure and the reproduction steps: results/EVALUATION.md",
    0.7, 6.2, 11.9, 0.3, 13, color=INK, bold=True)
+
+# ── page numbers on every slide. Stamped last so it survives any reordering, and it
+# reads the real slide count rather than a hardcoded total.
+total = len(prs.slides._sldIdLst)
+for idx, sl in enumerate(prs.slides, 1):
+    dark = idx in DARK_SLIDES
+    tb(sl, f"{idx} / {total}", 11.9, 6.95, 0.75, 0.3, 11,
+       color=(RGBColor(0x9A, 0xB0, 0xD8) if dark else MUTED), align=PP_ALIGN.RIGHT)
 
 OUT.parent.mkdir(parents=True, exist_ok=True)
 prs.save(OUT)

@@ -73,11 +73,11 @@ It is never used here as a common noun.
                   ▼
         ┌───────────────────────┐        ┌──────────────────────┐
         │  claude -p  (child)   │───────►│  Cortex              │──► LiteLLM ──► model
-        │  headless, one task   │  HTTPS │  forward proxy       │    gateway
+        │  headless, one task   │CONNECT │  forward proxy       │  (real HTTPS)
         │  stream-json on stdout│        │  + tls_bridge        │
         └───────────────────────┘        │  inference-parser    │
                   │                      └──────────────────────┘
-                  │ edits files                    │ SSE /v1/events
+                  │ edits files                    │ Server-Sent Events
                   ▼                                ▼
         ┌───────────────────────┐        ┌──────────────────────┐
         │ 3. install hidden     │        │  out/events/*.sse    │
@@ -90,6 +90,18 @@ It is never used here as a common noun.
                                ▼
                      one NDJSON row per repetition
 ```
+
+**Transport, precisely — the env var name misleads.** `HTTPS_PROXY` is *named* https but its
+value is `http://127.0.0.1:47600`: the hop from the child to the local Cortex service is
+**plaintext HTTP `CONNECT` on loopback**, not HTTPS. `tls_bridge` then terminates TLS with
+its own CA — which is exactly why `NODE_EXTRA_CA_CERTS` is required — so the request body can
+be parsed, and Cortex makes the real HTTPS connection outbound to the gateway. This is
+visible in the captured events: the first is `host=…:443, tunnel=true` (the CONNECT), and the
+following ones carry the decrypted request and response with no port and no tunnel flag.
+
+**SSE** is Server-Sent Events — Cortex's `GET /v1/events` live stream. The harness copies it
+to disk because the upstream session store is in-memory with a 30-minute TTL, so the file is
+the only durable record.
 
 **Three measurement sources, because none can answer another's question:**
 
