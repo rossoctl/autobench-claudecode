@@ -167,36 +167,40 @@ SECTIONS = [
         ("6", "Benchmarking setup — architecture"),
         ("7", "Why this shape — rationale"),
         ("8", "How a task earns its place"),
+        ("9", "What the verdict actually is"),
     ]),
     ("2 · Pricing", [
-        ("9", "Model pricing — internal LiteLLM rate card"),
+        ("10", "Model pricing — internal LiteLLM rate card"),
     ]),
     ("3 · Findings", [
-        ("10", "A prediction of ours that was falsified"),
-        ("11", "Two factors drive token cost"),
-        ("12", "Money reverses the token conclusion"),
-        ("13", "Token-efficiency is not cost-efficiency"),
-        ("14", "Skill cost is a property of skill × model"),
-        ("15", "Skill selection is reliable"),
+        ("11", "A prediction of ours that was falsified"),
+        ("12", "Two factors drive token cost"),
+        ("13", "Money reverses the token conclusion"),
+        ("14", "Token-efficiency is not cost-efficiency"),
+        ("15", "Downstream calls are counted, not attributed"),
+        ("16", "Skill cost is a property of skill × model"),
+        ("17", "Skill selection is reliable"),
     ]),
     ("4 · Conclusion", [
-        ("16", "Model selection recommendation"),
-        ("17", "Limitations, stated plainly"),
+        ("18", "Model selection recommendation"),
+        ("19", "Limitations, stated plainly"),
     ]),
 ]
 COLS = [(0.7, SECTIONS[:2]), (6.9, SECTIONS[2:])]
+_deepest = 0.0
 for x, groups in COLS:
-    y = 2.05
+    y = 2.02
     for sec_name, items in groups:
         tb(s, sec_name.upper(), x, y, 5.4, 0.3, 12, color=INK, bold=True)
-        y += 0.4
+        y += 0.38
         for num, label in items:
-            tb(s, num, x, y, 0.5, 0.3, 14, color=ICE, bold=True, align=PP_ALIGN.RIGHT)
-            tb(s, label, x + 0.7, y, 4.9, 0.3, 14, color=BODY)
-            y += 0.38
-        y += 0.3
-tb(s, "Every figure in this deck also appears in results/EVALUATION.md, which carries the full detail\n"
-      "and the reproduction steps.", 0.7, 6.4, 11.9, 0.6, 12, color=MUTED)
+            tb(s, num, x, y, 0.5, 0.3, 13.5, color=ICE, bold=True, align=PP_ALIGN.RIGHT)
+            tb(s, label, x + 0.7, y, 4.9, 0.3, 13.5, color=BODY)
+            y += 0.345
+        y += 0.26
+    _deepest = max(_deepest, y)          # the taller column governs the footnote
+tb(s, "Every figure in this deck also appears in results/EVALUATION.md, which carries the full detail "
+      "and the reproduction steps.", 0.7, min(_deepest + 0.08, 6.62), 11.9, 0.3, 12, color=MUTED)
 
 section(1, "Setup and method")
 
@@ -345,6 +349,27 @@ rows = [["rule kind", "example", "outcome"],
 table(s, rows, 0.7, 5.0, 11.9, [3.1, 6.4, 2.4], size=12,
       highlight={(1, 2): GOOD, (2, 2): WARN, (3, 2): WARN})
 
+# ─────────────────────────────────────────────── 9. the verdict files
+s = prs.slides.add_slide(BLANK); bg(s, PAPER)
+slide_title(s, "What the verdict actually is", "the evaluator")
+tb(s, "Plain pytest, run by the repo's own interpreter. A pass needs exit 0 AND every test file byte-identical\n"
+      "to what shipped — deleting the test, or rewriting it to assert the bug, also makes pytest green.",
+   0.7, 1.95, 11.9, 0.6, 14, color=INK)
+rows = [["task", "verdict file", "visible to agent?", "asserts"],
+        ["cortex-pyfix-001", "workspace/test_billing.py", "YES — tests ARE the spec",
+         "6 tests over 2 seeded bugs: a percentage treated as a fraction, and a dropped remainder"],
+        ["xlsx-fin-colors", "verdict/test_compliance.py", "no — installed after exit",
+         "2 tests: hardcoded inputs are blue-font; formula cells are not blue"],
+        ["xlsx-fin-font-clean", "verdict/test_compliance.py", "no — installed after exit",
+         "3 tests: one consistent professional font; no #REF!-class literals; saving and ratio are formulas"]]
+table(s, rows, 0.7, 2.7, 11.9, [2.5, 2.7, 2.4, 4.3], size=11)
+box(s, "The visible / hidden split is the load-bearing choice. cortex-pyfix SHOULD show its tests, because\n"
+      "satisfying them is the task. A COMPLIANCE verdict must stay hidden — it enumerates the conventions\n"
+      "being checked, so an agent that can read it simply complies and BOTH arms pass, measuring nothing.",
+    0.7, 4.9, 11.2, 1.0, fill=INK, color=RGBColor(0xFF, 0xFF, 0xFF), size=13, bold=True)
+tb(s, "Verdicts are also tamper-checked before the hidden file is installed, so the hidden test cannot itself\n"
+      "be counted as a modification.", 0.7, 6.1, 11.9, 0.55, 12, color=MUTED)
+
 section(2, "Pricing")
 
 # ─────────────────────────────────────────────────── 9. pricing
@@ -461,9 +486,34 @@ box(s, "opus-5 is the MOST token-efficient and the LEAST cost-efficient model te
       "Quoting one number and calling it “efficiency” picks the answer by accident.",
     0.7, 5.95, 11.2, 0.8, fill=INK, color=RGBColor(0xFF, 0xFF, 0xFF), size=14, bold=True)
 
-# ─────────────────────────────────────────────────────────── 12. finding: skill overhead
+# ────────────────────────────────────── 15. downstream LLM calls
 s = prs.slides.add_slide(BLANK); bg(s, PAPER)
-slide_title(s, "Skill cost is a property of skill × model", "finding 5 · overhead")
+slide_title(s, "Downstream calls are counted, not attributed", "finding 5 · measurement integrity")
+tb(s, "An LLM call can trigger more LLM calls: a subagent runs its own agent loop. Cortex counts them, because the\n"
+      "child's HTTPS_PROXY is inherited by its subprocesses — that traffic crosses the same proxy into the window.",
+   0.7, 1.95, 11.9, 0.6, 14, color=BODY)
+rows = [["measure", "effect of downstream work"],
+        ["total tokens / dollars", "CORRECT — the calls really happened and are really billed"],
+        ["tokens per LLM call", "unaffected — still that model's per-call average"],
+        ["LLM calls per task", "INFLATED — the “task” is no longer a single agent loop"],
+        ["any skill-overhead ratio", "INVALID — it compares two different amounts of work"]]
+table(s, rows, 0.7, 2.7, 11.9, [3.4, 8.5], size=13,
+      highlight={(1, 1): GOOD, (3, 1): WARN, (4, 1): WARN})
+tb(s, "Magnitude where it occurred — affected repetitions vs others in the same cell:",
+   0.7, 4.35, 11.9, 0.3, 13, color=MUTED)
+rows2 = [["cell", "with downstream", "without"],
+         ["pptx-body-left-aligned ON", "26 calls / 1,255,632 tok", "10 calls / 458,514 tok"],
+         ["pptx-size-contrast ON", "36 calls / 1,908,134 tok", "10 calls / 491,474 tok"],
+         ["select-deck SELECT", "46 calls / 2,485,834 tok", "7 calls / 302,900 tok"]]
+table(s, rows2, 0.7, 4.75, 11.9, [4.3, 3.8, 3.8], size=12)
+box(s, "2.7×–8.2×. The detector that should have flagged these matched a tool named `Task`, but this build names it\n"
+      "`Agent` — so it never fired and 5 repetitions passed as clean. Fixed and unit-tested. The xlsx COST PROFILE\n"
+      "is unaffected: none of the 5 fall in its 20 cells.",
+    0.7, 6.05, 11.2, 0.95, fill=INK, color=RGBColor(0xFF, 0xFF, 0xFF), size=12.5, bold=True)
+
+# ──────────────────────── 16. finding: skill overhead
+s = prs.slides.add_slide(BLANK); bg(s, PAPER)
+slide_title(s, "Skill cost is a property of skill × model", "finding 6 · overhead")
 tb(s, "skill-on ÷ skill-off, same skill (xlsx), same task, same model. Tokens AND dollars — they differ,\n"
       "because the input/output/cache mix shifts between arms even at a fixed unit price.",
    0.7, 1.9, 11.9, 0.55, 13, color=MUTED)
@@ -485,7 +535,7 @@ tb(s, "On opus-5 the skill adds only 6–8% in dollars; on haiku it roughly doub
 
 # ─────────────────────────────────────────────────────────── 13. selection
 s = prs.slides.add_slide(BLANK); bg(s, PAPER)
-slide_title(s, "Skill selection is reliable", "finding 6 · selection")
+slide_title(s, "Skill selection is reliable", "finding 7 · selection")
 tb(s, "All four candidate skills present, prompt names none, verdict read from the transcript.\n"
       "sonnet-4-6, n=3 per task — 12/12 correct, 0 confounded.",
    0.7, 1.95, 11.9, 0.6, 15, color=BODY)

@@ -161,7 +161,7 @@ this arm means genuinely ambiguous prompts, not more clear ones.
 | Document | Contents |
 |---|---|
 | [`results/EVALUATION.md`](results/EVALUATION.md) | Full evaluation: terms, setup + rationale, pricing, methodology, all findings, model recommendation, limitations |
-| [`results/autobench-claudecode-summary.pptx`](results/autobench-claudecode-summary.pptx) | 14-slide summary of the same material (regenerate: `tools/make_summary_deck.py`) |
+| [`results/autobench-claudecode-summary.pptx`](results/autobench-claudecode-summary.pptx) | 19-slide summary of the same material, contents on slide 2 (regenerate: `tools/make_summary_deck.py`) |
 | [`results/xlsx-cost-profile-20260908.txt`](results/xlsx-cost-profile-20260908.txt) | Raw compiled profile output |
 
 ### Monetary cost
