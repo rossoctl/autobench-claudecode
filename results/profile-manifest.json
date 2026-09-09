@@ -1,8 +1,21 @@
 {
-  "note": "Exact inputs to the xlsx cost profile. --report reads only these. Regenerate with `profile.py --freeze` after a deliberate --run.",
-  "excluded": [
-    "cortex-pyfix-001-on-claude-sonnet-4-6-20260909161334.ndjson"
-  ],
+  "note": "Exact inputs to the xlsx cost profile. --report reads only these. Regenerate with `profile.py --freeze` after a deliberate --run. The published grid is flat n=5: 20 cells x 5 reps from one grid run. `excluded` files are real measurements still on disk, left out on purpose -- each with its reason.",
+  "excluded": {
+    "cortex-pyfix-001-20260908153958.ndjson": "pre-grid development sweep (1-3 reps, sonnet only) -- pooling it made the grid uneven at n=7-11 on the two sonnets while haiku/opus stayed at 5",
+    "cortex-pyfix-001-on-20260908160004.ndjson": "pre-grid development sweep (1-3 reps, sonnet only) -- pooling it made the grid uneven at n=7-11 on the two sonnets while haiku/opus stayed at 5",
+    "cortex-pyfix-001-on-claude-sonnet-4-6-20260908165638.ndjson": "pre-grid development sweep (1-3 reps, sonnet only) -- pooling it made the grid uneven at n=7-11 on the two sonnets while haiku/opus stayed at 5",
+    "cortex-pyfix-001-on-claude-sonnet-4-6-20260909161334.ndjson": "preflight canary run on 2026-09-09, a different experiment from the published grid",
+    "xlsx-fin-colors-off-20260908160355.ndjson": "pre-grid development sweep (1-3 reps, sonnet only) -- pooling it made the grid uneven at n=7-11 on the two sonnets while haiku/opus stayed at 5",
+    "xlsx-fin-colors-off-claude-sonnet-5-20260908193933.ndjson": "pre-grid development sweep (1-3 reps, sonnet only) -- pooling it made the grid uneven at n=7-11 on the two sonnets while haiku/opus stayed at 5",
+    "xlsx-fin-colors-on-20260908161951.ndjson": "pre-grid development sweep (1-3 reps, sonnet only) -- pooling it made the grid uneven at n=7-11 on the two sonnets while haiku/opus stayed at 5",
+    "xlsx-fin-colors-on-claude-sonnet-4-6-20260908165732.ndjson": "pre-grid development sweep (1-3 reps, sonnet only) -- pooling it made the grid uneven at n=7-11 on the two sonnets while haiku/opus stayed at 5",
+    "xlsx-fin-colors-on-claude-sonnet-5-20260908194410.ndjson": "pre-grid development sweep (1-3 reps, sonnet only) -- pooling it made the grid uneven at n=7-11 on the two sonnets while haiku/opus stayed at 5",
+    "xlsx-fin-font-clean-off-20260908160751.ndjson": "pre-grid development sweep (1-3 reps, sonnet only) -- pooling it made the grid uneven at n=7-11 on the two sonnets while haiku/opus stayed at 5",
+    "xlsx-fin-font-clean-off-claude-sonnet-5-20260908194144.ndjson": "pre-grid development sweep (1-3 reps, sonnet only) -- pooling it made the grid uneven at n=7-11 on the two sonnets while haiku/opus stayed at 5",
+    "xlsx-fin-font-clean-off-claude-sonnet-5-20260908195245.ndjson": "pre-grid development sweep (1-3 reps, sonnet only) -- pooling it made the grid uneven at n=7-11 on the two sonnets while haiku/opus stayed at 5",
+    "xlsx-fin-font-clean-on-20260908162355.ndjson": "pre-grid development sweep (1-3 reps, sonnet only) -- pooling it made the grid uneven at n=7-11 on the two sonnets while haiku/opus stayed at 5",
+    "xlsx-fin-font-clean-on-claude-sonnet-5-20260908194834.ndjson": "pre-grid development sweep (1-3 reps, sonnet only) -- pooling it made the grid uneven at n=7-11 on the two sonnets while haiku/opus stayed at 5"
+  },
   "files": [
     {
       "file": "out/runs-archive/cortex-pyfix-001-20260908151626.ndjson",
@@ -15,39 +28,9 @@
       "sha256": "3cecc6dd9d105c505c9ae793568b6e016e8883900a31490db447ee32903b6a05"
     },
     {
-      "file": "out/runs-archive/cortex-pyfix-001-20260908153958.ndjson",
-      "rows": 3,
-      "sha256": "216fd1c29d2a12c99861b6e4a9b4e06e85d3f5bfbf62736c1ab5e465ff0d1698"
-    },
-    {
-      "file": "out/runs-archive/cortex-pyfix-001-on-20260908160004.ndjson",
-      "rows": 1,
-      "sha256": "6308a5847ec07d429abd74f371123e8bf2d83dda250cf501551fc16cef76dca4"
-    },
-    {
       "file": "out/runs-archive/xlsx-fin-assumption-refs-off-20260908160121.ndjson",
       "rows": 3,
       "sha256": "a7397f921bfbad4132e2d58c6aee5ab621d6a6416bbe9bfff3fd57da74150f88"
-    },
-    {
-      "file": "out/runs-archive/xlsx-fin-colors-off-20260908160355.ndjson",
-      "rows": 3,
-      "sha256": "25f41aabf40edd1d6c2a412d85bb50dd7c5d9811d7f871bd1c9bfb289b7e76e1"
-    },
-    {
-      "file": "out/runs-archive/xlsx-fin-colors-on-20260908161951.ndjson",
-      "rows": 3,
-      "sha256": "6127df0bc5280415388e61a68941df721476bdac3dca706d2ce2edaab4f842ab"
-    },
-    {
-      "file": "out/runs-archive/xlsx-fin-font-clean-off-20260908160751.ndjson",
-      "rows": 3,
-      "sha256": "dd905a5c38dd6474fb043de3adf9983616ffff502cfdaf6c30b9c0a975303d36"
-    },
-    {
-      "file": "out/runs-archive/xlsx-fin-font-clean-on-20260908162355.ndjson",
-      "rows": 3,
-      "sha256": "bfb21ef5cc95457421e07d92059e6c608a63262ea1931d8a0a5d1ee1ead2cbf4"
     },
     {
       "file": "out/runs-archive/xlsx-fin-numfmt-off-20260908161055.ndjson",
@@ -73,11 +56,6 @@
       "file": "out/runs/cortex-pyfix-001-on-claude-opus-5-20260908224911.ndjson",
       "rows": 5,
       "sha256": "2f595051c9aa4913cca3f4ebe8643e9c56331af7833cf141e330aa7dd3de2da4"
-    },
-    {
-      "file": "out/runs/cortex-pyfix-001-on-claude-sonnet-4-6-20260908165638.ndjson",
-      "rows": 1,
-      "sha256": "ccdbe96782f8707d4f538df65db721fe0c4151fb340ee105e6a4cef2e1f09285"
     },
     {
       "file": "out/runs/cortex-pyfix-001-on-claude-sonnet-4-6-20260908215336.ndjson",
@@ -195,11 +173,6 @@
       "sha256": "452ffb51e1b4873cea6f23f5639b8e1acdd9444e6fbce43abf8d6f8714f47f64"
     },
     {
-      "file": "out/runs/xlsx-fin-colors-off-claude-sonnet-5-20260908193933.ndjson",
-      "rows": 3,
-      "sha256": "93b292ba34464f2209e6729c379938d907a75cded1b6983e87b03f9ebb93cfe6"
-    },
-    {
       "file": "out/runs/xlsx-fin-colors-off-claude-sonnet-5-20260908220255.ndjson",
       "rows": 5,
       "sha256": "8d2ec6aadcd463281d668880c3b1489883ffb97d718c37118bd7910db29cfe83"
@@ -215,19 +188,9 @@
       "sha256": "40e6b5bb2df078f4d6716772e5719076e2c712311554856a49a76b67ef355a79"
     },
     {
-      "file": "out/runs/xlsx-fin-colors-on-claude-sonnet-4-6-20260908165732.ndjson",
-      "rows": 1,
-      "sha256": "d5da00be6628c0a3c28aba76a767178a8116e4e5a5f5345fa474a815cb53f40b"
-    },
-    {
       "file": "out/runs/xlsx-fin-colors-on-claude-sonnet-4-6-20260908213059.ndjson",
       "rows": 5,
       "sha256": "b24433fa827a9ee8b337690f1c58d2d5f38306823761570182a4ef87b53f9391"
-    },
-    {
-      "file": "out/runs/xlsx-fin-colors-on-claude-sonnet-5-20260908194410.ndjson",
-      "rows": 3,
-      "sha256": "16426fed7fa7e53ab0192a13c2d55516e09cc001f4093e84c5340b9fc1bb783c"
     },
     {
       "file": "out/runs/xlsx-fin-colors-on-claude-sonnet-5-20260908215537.ndjson",
@@ -250,16 +213,6 @@
       "sha256": "e7eca61472069824495af7e86902ba3170f0afb9439b0dbf69ba8ca8ae143259"
     },
     {
-      "file": "out/runs/xlsx-fin-font-clean-off-claude-sonnet-5-20260908194144.ndjson",
-      "rows": 3,
-      "sha256": "1191490099ca0eed27bc3327004978506727161069c6716019dc78abfa2bdc6f"
-    },
-    {
-      "file": "out/runs/xlsx-fin-font-clean-off-claude-sonnet-5-20260908195245.ndjson",
-      "rows": 3,
-      "sha256": "d3c98f4a4990617f30668dbc79a9066716eeaf84f8e0bc62208554d3f7a45fbf"
-    },
-    {
       "file": "out/runs/xlsx-fin-font-clean-off-claude-sonnet-5-20260908221241.ndjson",
       "rows": 5,
       "sha256": "f4476d7a05e29f33c68e9dc460e09582ad337f0bbc7b7bd24810855dc6c6ce27"
@@ -278,11 +231,6 @@
       "file": "out/runs/xlsx-fin-font-clean-on-claude-sonnet-4-6-20260908214250.ndjson",
       "rows": 5,
       "sha256": "d932f6c2ab948164df326ce4f54e588227b44bb772d8efefaeb8abe814d23613"
-    },
-    {
-      "file": "out/runs/xlsx-fin-font-clean-on-claude-sonnet-5-20260908194834.ndjson",
-      "rows": 3,
-      "sha256": "69b740931cf288bc1af0a0d8bda4a41d5d963412d90f01798279cd6965a42f93"
     },
     {
       "file": "out/runs/xlsx-fin-font-clean-on-claude-sonnet-5-20260908220654.ndjson",

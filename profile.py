@@ -23,6 +23,16 @@ So results/profile-manifest.json lists the exact files, their row counts and the
 `--report` reads it and shouts if a file went missing or changed underneath. Adding reps is
 now a deliberate act (`--freeze` again), not a side effect of running anything else.
 
+THE GRID IS FLAT n=5, deliberately. Pooling by (task, arm, model) also swept in the earlier
+same-day development sweeps -- 1-rep and 3-rep runs against sonnet-4-6 and sonnet-5, the two
+models the harness was built against -- so those two models sat at n=7-11 while haiku and
+opus sat at n=5. That is an uneven grid dressed up as one number, and it cost nothing to fix:
+the 33 sweep reps are excluded (with a reason, in the manifest), leaving exactly 5 reps per
+cell from the single grid run, 20 cells, 100 reps. Excluding them TIGHTENED the tok/LLMcall
+spreads (sonnet-5 0.11 -> 0.05, opus-5 0.08 -> 0.05) and moved no pass rate, so the flat grid
+is also the cleaner measurement. The excluded reps are real and stay on disk; raising n above
+5 means new invocations, which is a spending decision, not a filter change.
+
 Reported per cell and then across models:
   * tok/LLMcall        tokens per LLM CALL (one /v1/chat/completions) -- a MODEL constant.
                        NOTE one task = one `claude -p` run and makes SEVERAL LLM calls.
@@ -105,13 +115,32 @@ def rows_of(p):
     return [ln for ln in pathlib.Path(p).read_text().splitlines() if ln.strip()]
 
 
-def freeze(exclude=()):
+def prior_exclusions():
+    """Exclusions already recorded in the manifest, so a re-freeze does not silently
+    re-admit them. Tolerates the older list-of-basenames form."""
+    if not MANIFEST.exists():
+        return {}
+    ex = json.loads(MANIFEST.read_text()).get("excluded") or {}
+    return {b: "(reason not recorded)" for b in ex} if isinstance(ex, list) else dict(ex)
+
+
+def freeze(exclude=None, keep_prior=True):
     """Pin the current membership. Excluded basenames stay on disk but leave the profile.
 
     Excluding is for reps that are real measurements but belong to a DIFFERENT experiment
-    than the published grid -- a canary, a smoke test. The data is never deleted; it simply
-    is not retroactively pooled into a cell someone has already published a number for.
+    than the published grid -- a pre-grid sweep, a canary, a smoke test. The data is never
+    deleted; it simply is not retroactively pooled into a cell someone has already published
+    a number for.
+
+    Each exclusion carries a REASON, stored in the manifest. Without one, a future reader
+    finds a bare list of filenames and cannot tell a deliberate design choice from someone
+    quietly dropping inconvenient reps -- which is exactly the question an excluded rep
+    invites. Prior exclusions carry forward by default, so re-freezing after a new grid run
+    does not silently re-admit them.
     """
+    exclude = dict(exclude or {})
+    if keep_prior:
+        exclude = {**prior_exclusions(), **exclude}
     entries, skipped, empty = [], [], []
     for f in all_run_files():
         base = pathlib.Path(f).name
@@ -130,14 +159,19 @@ def freeze(exclude=()):
     MANIFEST.parent.mkdir(parents=True, exist_ok=True)
     MANIFEST.write_text(json.dumps(
         {"note": "Exact inputs to the xlsx cost profile. --report reads only these. "
-                 "Regenerate with `profile.py --freeze` after a deliberate --run.",
-         "excluded": sorted(skipped),
+                 "Regenerate with `profile.py --freeze` after a deliberate --run. "
+                 "The published grid is flat n=5: 20 cells x 5 reps from one grid run. "
+                 "`excluded` files are real measurements still on disk, left out on "
+                 "purpose -- each with its reason.",
+         "excluded": {b: exclude[b] for b in sorted(skipped)},
          "files": entries}, indent=2) + "\n")
     total = sum(e["rows"] for e in entries)
     print(f"froze {len(entries)} files / {total} reps -> "
           f"{MANIFEST.relative_to(ROOT)}")
     if skipped:
-        print(f"excluded {len(skipped)}: " + ", ".join(skipped))
+        print(f"excluded {len(skipped)} file(s), still on disk:")
+        for b in sorted(skipped):
+            print(f"   {b}  -- {exclude[b]}")
     if empty:
         print(f"skipped {len(empty)} zero-row file(s): " + ", ".join(empty))
     return entries
@@ -338,16 +372,16 @@ def report(reps, use_manifest=True):
         print(f"  {SHORT[m]:11} " + "  ".join(parts))
 
     print("\n" + "=" * 100)
-    # This line used to read "n=5 per cell", taken from --reps rather than from the data.
-    # It was false: the grid ran 5 reps per cell, but earlier 3-rep sweeps of the same
-    # (task, arm, model) were pooled in, so real n runs 5-11 and differs BETWEEN models
-    # within a row. Read the n column, not this footer, and note that a 5-sample and an
-    # 11-sample median are not equally trustworthy.
+    # This line used to read "n=5 per cell" taken from --reps rather than from the data,
+    # which was false while the pre-grid sweeps were pooled in (real n ran 5-11, and
+    # differed BETWEEN models within a row). It now counts the data, so if the grid ever
+    # goes uneven again the footer says so instead of asserting a flat n.
     ns = sorted({c["n"] for c in cells.values()})
     if ns:
-        span = f"{ns[0]}" if len(ns) == 1 else f"{ns[0]}-{ns[-1]}"
-        print(f"n per cell: {span} (see the n column; --reps was {reps}). "
-              f"CV on a median this small is indicative, not tight.")
+        flat = len(ns) == 1
+        span = f"{ns[0]}" if flat else f"{ns[0]}-{ns[-1]} -- UNEVEN, read the n column"
+        print(f"n per cell: {span} ({len(cells)} cells; --reps was {reps}). "
+              f"CV on a {ns[0]}-sample median is indicative, not tight.")
     print(f"membership: {provenance}")
     print("No dollar figures: Cortex leaves costMicros unpopulated, so pricing would be")
     print("invented. Tokens are split by tier above -- apply your own rates.")
@@ -359,15 +393,23 @@ if __name__ == "__main__":
     ap.add_argument("--report", action="store_true")
     ap.add_argument("--freeze", action="store_true",
                     help="pin current membership into results/profile-manifest.json")
-    ap.add_argument("--exclude", action="append", default=[], metavar="BASENAME",
+    ap.add_argument("--exclude", action="append", default=[], metavar="BASENAME=REASON",
                     help="with --freeze: a run file to leave OUT of the profile "
-                         "(repeatable). The file stays on disk.")
+                         "(repeatable). The file stays on disk. Give a reason after '=' "
+                         "-- it is stored in the manifest.")
+    ap.add_argument("--reset-exclusions", action="store_true",
+                    help="with --freeze: do NOT carry forward the manifest's existing "
+                         "exclusions (they are kept by default)")
     ap.add_argument("--all", action="store_true",
                     help="with --report: ignore the manifest and glob everything")
     ap.add_argument("--reps", type=int, default=5)
     a = ap.parse_args()
     if a.freeze:
-        freeze(set(a.exclude))
+        ex = {}
+        for spec in a.exclude:
+            base, _, why = spec.partition("=")
+            ex[base] = why or "(reason not given)"
+        freeze(ex, keep_prior=not a.reset_exclusions)
     if a.run:
         run(a.reps)
         print("\nNOTE the manifest is unchanged. To publish these reps, re-pin with:")

@@ -150,7 +150,7 @@ s = prs.slides.add_slide(BLANK); bg(s, INK); DARK_SLIDES.add(len(prs.slides._sld
 tb(s, "Benchmarking Claude Code", 0.9, 2.1, 11.5, 1.1, 46, color=RGBColor(0xFF, 0xFF, 0xFF), bold=True)
 tb(s, "Cost, skill effect and model selection — measured, priced, and where it\nsurprised us",
    0.9, 3.4, 11.0, 1.0, 20, color=ICE)
-tb(s, "193 recorded repetitions  ·  4 models  ·  internal LiteLLM",
+tb(s, "194 recorded repetitions  ·  100 in the n=5 cost grid  ·  4 models  ·  internal LiteLLM",
    0.9, 5.75, 11.0, 0.4, 13, color=RGBColor(0x9A, 0xB0, 0xD8))
 tb(s, f"Last modified {dt.datetime.now().astimezone().strftime('%Y-%m-%d %H:%M %Z')}",
    0.9, 6.2, 11.0, 0.35, 12, color=RGBColor(0x7A, 0x8F, 0xC0))
@@ -424,13 +424,13 @@ tb(s, "Factor 1 — tokens per LLM call: ratio vs sonnet-4-6, across five struct
       "(≤0.15 is reported as CONSTANT).",
    0.7, 2.72, 11.9, 0.8, 12.5, color=MUTED, spacing=1)
 rows = [["model", "range across the 5 cells", "spread", "reading"],
-        ["haiku-4-5", "0.97 – 1.05", "0.07", "≈ same context per LLM call"],
-        ["sonnet-5", "1.19 – 1.30", "0.11", "≈1.23× more per LLM call"],
-        ["opus-5", "0.89 – 0.97", "0.08", "≈0.90× — leaner per LLM call"]]
+        ["haiku-4-5", "0.97 – 1.04", "0.07", "≈ same context per LLM call"],
+        ["sonnet-5", "1.18 – 1.24", "0.05", "≈1.21× more per LLM call"],
+        ["opus-5", "0.88 – 0.93", "0.05", "≈0.90× — leaner per LLM call"]]
 table(s, rows, 0.7, 3.62, 11.9, [2.4, 2.6, 1.7, 5.2], size=14, highlight={(3, 3): GOOD})
 tb(s, "Factor 2 — LLM calls per task: NOT constant. 0.40–1.00× for haiku, 0.83–2.00× for opus-5, by task.",
    0.7, 5.05, 11.9, 0.35, 15, color=WARN, bold=True)
-box(s, "One TASK is one `claude -p` run making SEVERAL LLM calls (5–24), each re-sending the growing conversation.\n"
+box(s, "One TASK is one `claude -p` run making SEVERAL LLM calls (2–29), each re-sending the growing conversation.\n"
       "A raw token total multiplies the two factors and hides both.",
     0.7, 5.45, 11.7, 0.75, fill=RGBColor(0xFF, 0xFF, 0xFF), size=12.5, bold=True, color=INK)
 tb(s, "That re-sending is also why cache reads are 81–97% of prompt tokens in every cell.",
@@ -442,22 +442,23 @@ slide_title(s, "Money reverses the token conclusion", "finding 3 · cost per sol
 tb(s, "$ per SOLVED task (scenario B). Cost per solved = median tokens ÷ pass rate, so failures are charged.",
    0.7, 1.9, 11.9, 0.3, 14, color=MUTED)
 rows = [["task", "haiku-4-5", "sonnet-4-6", "sonnet-5", "opus-5"],
-        ["xlsx-fin-colors (ON)", "0.0386", "0.1590", "0.1678", "0.2719"],
-        ["xlsx-fin-font-clean (ON)", "0.1075", "0.1873", "0.1332", "0.2486"],
-        ["cortex-pyfix-001 (no skill)", "0.0313", "0.0837", "0.0588", "0.1030"]]
+        ["xlsx-fin-colors (ON)", "0.0386", "0.1746", "0.1608", "0.2719"],
+        ["xlsx-fin-font-clean (ON)", "0.1075", "0.1896", "0.1261", "0.2486"],
+        ["cortex-pyfix-001 (no skill)", "0.0313", "0.0839", "0.0588", "0.1030"]]
 table(s, rows, 0.7, 2.35, 11.9, [3.9, 2.0, 2.0, 2.0, 2.0], size=14,
       highlight={(1, 1): GOOD, (2, 1): GOOD, (3, 1): GOOD,
                  (1, 4): WARN, (2, 4): WARN, (3, 4): WARN})
 box(s, "opus-5 used the FEWEST tokens on two of three cells —\nand is the MOST EXPENSIVE on all three.",
     0.7, 4.05, 5.6, 0.9, fill=INK, color=RGBColor(0xFF, 0xFF, 0xFF), size=14, bold=True)
-box(s, "sonnet-5 uses MORE tokens than sonnet-4-6\nyet costs LESS, at 2/3 the unit price.",
+box(s, "sonnet-5 uses MORE tokens than sonnet-4-6 yet\ncosts LESS on all three cells here, at 2/3 the unit price.",
     6.75, 4.05, 5.6, 0.9, fill=INK, color=RGBColor(0xFF, 0xFF, 0xFF), size=14, bold=True)
-tb(s, "Same cells under scenario A (no cache discount) — ordering identical throughout, so the conclusion does not\n"
-      "depend on the unverified cache assumption:", 0.7, 5.1, 11.9, 0.55, 13, color=MUTED)
+tb(s, "Same cells under scenario A (no cache discount). haiku stays cheapest and opus-5 dearest everywhere — but the two\n"
+      "sonnets SWAP on xlsx-fin-colors, so that one mid-band ordering does depend on the unverified cache assumption:",
+   0.7, 5.1, 11.9, 0.55, 13, color=MUTED)
 rows_a = [["task", "haiku-4-5", "sonnet-4-6", "sonnet-5", "opus-5"],
-          ["xlsx-fin-colors", "0.1409", "0.5916", "0.9080", "1.1625"],
-          ["xlsx-fin-font-clean", "0.3364", "0.8462", "0.7035", "1.1259"],
-          ["cortex-pyfix-001", "0.1597", "0.4567", "0.3113", "0.5649"]]
+          ["xlsx-fin-colors", "0.1409", "0.6677", "0.8920", "1.1625"],
+          ["xlsx-fin-font-clean", "0.3364", "0.8484", "0.6625", "1.1259"],
+          ["cortex-pyfix-001", "0.1597", "0.4582", "0.3113", "0.5649"]]
 table(s, rows_a, 0.7, 5.7, 11.9, [3.9, 2.0, 2.0, 2.0, 2.0], size=12,
       highlight={(1, 1): GOOD, (2, 1): GOOD, (3, 1): GOOD,
                  (1, 4): WARN, (2, 4): WARN, (3, 4): WARN})
@@ -477,7 +478,7 @@ tb(s, "They diverge because unit price spans 5× (haiku $0.76 → opus-5 $3.80 p
    0.7, 3.5, 11.9, 0.55, 13, color=BODY)
 rows2 = [["model", "tokens/solved task", "rank", "$/solved task", "rank"],
          ["opus-5", "144,834", "1st", "0.1030", "4th"],
-         ["sonnet-4-6", "196,634", "2nd", "0.0842", "3rd"],
+         ["sonnet-4-6", "196,634", "2nd", "0.0839", "3rd"],
          ["sonnet-5", "200,732", "3rd", "0.0588", "2nd"],
          ["haiku-4-5", "204,034", "4th", "0.0313", "1st"]]
 table(s, rows2, 0.7, 4.15, 11.9, [3.1, 2.6, 1.6, 2.6, 1.6], size=13,
@@ -562,17 +563,18 @@ tb(s, "Model selection recommendation", 0.7, 0.75, 11.9, 0.7, 30,
    color=RGBColor(0xFF, 0xFF, 0xFF), bold=True)
 tb(s, "on the benchmark evidence, for skill-driven document work", 0.7, 1.35, 11.9, 0.35, 14, color=ICE)
 box(s, "ADOPT AS DEFAULT\n\nclaude-sonnet-5\n\n100% pass on every task, and cheaper\n"
-      "than sonnet-4-6 in 2 of 3 cells — 29%\non font-clean, 30% on the canary —\n"
-      "despite using MORE tokens.\n2/3 unit price absorbs 1.23×/call.",
+      "than sonnet-4-6 on all 3 cells (scenario B)\n— 33% on font-clean, 30% on the\n"
+      "canary, 8% on colors — despite using\nMORE tokens. 2/3 unit price\nabsorbs 1.21×/call.",
     0.7, 2.0, 3.7, 2.85, fill=RGBColor(0xFF, 0xFF, 0xFF), size=12, color=BODY)
-box(s, "ONLY WITH A VALIDATOR\n\nclaude-haiku-4-5\n\nMost cost-efficient everywhere by\n2–4×, and fastest. But it failed\n"
+box(s, "ONLY WITH A VALIDATOR\n\nclaude-haiku-4-5\n\nMost cost-efficient everywhere,\nby 1.2–4.2× over the next\ncheapest, and fastest. But it failed\n"
       "3 of 5 WITH the skill supplied —\nand one failure hardcoded values\ninstead of formulas, which LOOKS\ncorrect. Retry only works if you\ncan detect the failure.",
     4.8, 2.0, 3.7, 2.85, fill=RGBColor(0xFF, 0xFF, 0xFF), size=11.5, color=BODY)
-box(s, "NOT INDICATED HERE\n\nclaude-opus-5\n\nMost expensive in all three cells\n(1.6–2.1× sonnet-5), no pass-rate\n"
+box(s, "NOT INDICATED HERE\n\nclaude-opus-5\n\nMost expensive in all three cells\n(1.7–2.0× sonnet-5, scenario B), no pass-rate\n"
       "advantage. Genuinely the most\ntoken-efficient and the only model\nto solve a task unaided — may earn\nits premium on harder work.",
     8.9, 2.0, 3.7, 2.85, fill=RGBColor(0xFF, 0xFF, 0xFF), size=12, color=BODY)
-tb(s, "Confidence: the pass-rate and cost orderings hold across BOTH pricing scenarios, and tokens/call holds across five\n"
-      "independent cells. Absolute dollar figures are indicative — n=5–10 per cell, and cache billing is unverified.",
+tb(s, "Confidence: pass rates, the cheapest/dearest ordering and the token/cost inversion all hold across BOTH pricing\n"
+      "scenarios; tokens/call holds across five independent cells. Absolute dollar figures are indicative — n=5 per cell,\n"
+      "cache billing unverified, and one mid-band pair (the two sonnets on xlsx-fin-colors) swaps between scenarios.",
    0.7, 5.1, 11.9, 0.7, 13, color=ICE)
 
 # ─────────────────────────────────────────────────────────── 15. limitations
@@ -580,8 +582,8 @@ s = prs.slides.add_slide(BLANK); bg(s, PAPER)
 slide_title(s, "Limitations, stated plainly", "what would change the conclusion")
 rows = [["limitation", "consequence"],
         ["One skill (xlsx)", "every skill-specific conclusion is xlsx-specific; “free on opus-5” may be an xlsx property"],
-        ["n = 5–10 per cell (uneven), some CV to 0.85", "read the n column, not a single number; tokens/call constants are solid (5 cells agree), individual dollar figures indicative"],
-        ["Cache billing unverified", "largest single uncertainty — 4–5× on ABSOLUTE cost, but changes no ranking"],
+        ["n = 5 per cell (20 cells), CV to 0.85", "tokens/call constants are solid (5 cells agree); a single cell's median is indicative"],
+        ["Cache billing unverified", "4–5× on ABSOLUTE cost; no headline ranking changes, but the two sonnets swap on colors"],
         ["Two tasks, one narrow genre", "financial-spreadsheet formatting. Not a general coding benchmark"],
         ["aws/ vs bare alias pricing", "assumed identical; unprovable with a non-admin key"],
         ["Wall-clock not load-controlled", "gateway-dependent; treat as indicative only"]]

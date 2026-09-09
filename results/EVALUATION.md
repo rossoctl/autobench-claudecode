@@ -1,7 +1,8 @@
 # AutoBench for Claude Code — Evaluation
 
 **Date:** 2026-09-09 · **Subject under test:** Claude Code (`claude` CLI 2.1.257)
-**Gateway:** internal ETE LiteLLM · **Repetitions recorded:** 193 · **Skill measured:** `xlsx`
+**Gateway:** internal ETE LiteLLM · **Repetitions recorded:** 194 (100 in the n=5 cost grid) ·
+**Skill measured:** `xlsx`
 
 ---
 
@@ -15,8 +16,8 @@ result against the internal LiteLLM rate card.
 
 | Use | Model | Why |
 |---|---|---|
-| Default for skill-driven document work | **`claude-sonnet-5`** | 100% pass on every task, and more **cost-efficient** than `sonnet-4-6` in 2 of 3 cells despite being *less* token-efficient |
-| Cost-sensitive, tolerant of retries | **`claude-haiku-4-5`** | Most **cost-efficient** in every cell by 2–4×, but only **40%** pass on the harder task |
+| Default for skill-driven document work | **`claude-sonnet-5`** | 100% pass on every task, and more **cost-efficient** than `sonnet-4-6` in all 3 cells (scenario B) despite being *less* token-efficient |
+| Cost-sensitive, tolerant of retries | **`claude-haiku-4-5`** | Most **cost-efficient** in every cell, by 1.2–4.2× over the next cheapest, but only **40%** pass on the harder task |
 | Not indicated by this evidence | `claude-opus-5` | Least **cost-efficient** in every cell — though the *most token-efficient*, so it may suit token-bound rather than bill-bound work |
 
 Three findings that a simpler measurement would have got wrong:
@@ -67,9 +68,9 @@ These were conflated early in the work and are kept strictly separate.
 | **Task** | One unit of work: `prompt.md` + a fresh `workspace/`, optionally a hidden `verdict/`. |
 | **Verdict** | The programmatic pass test. A command's exit code — never a model's opinion. |
 | **Arm** | A condition applied to a task. `off` = skill unavailable (control), `on` = skill available and explicitly invoked, `select` = all skills available, none named. |
-| **Cell** | One (task × arm × model) combination, measured over *n* repetitions. `xlsx-fin-colors` / `on` / `sonnet-5` is one cell (n=8). The profile has 5 (task, arm) pairs × 4 models = **20 cells**. |
+| **Cell** | One (task × arm × model) combination, measured over *n* repetitions. `xlsx-fin-colors` / `on` / `sonnet-5` is one cell (n=5). The profile has 5 (task, arm) pairs × 4 models = **20 cells**, 100 repetitions. |
 | **Repetition** (= one task run) | One headless `claude -p` invocation in a fresh workspace. |
-| **LLM call** | One `/v1/chat/completions` request/response on the wire. **A single task makes several** — 5 to 24 in these runs — each re-sending the growing conversation. |
+| **LLM call** | One `/v1/chat/completions` request/response on the wire. **A single task makes several** — 2 to 29 in these runs — each re-sending the growing conversation. |
 | **Compliance task** | Asks for ordinary work; the hidden verdict checks whether a *skill convention* was followed. |
 | **Selection task** | Names no skill; the verdict is whether the model *chose* the right one. |
 | **Confound** | A repetition whose measurement is untrustworthy (foreign skill, subagent, model-pin mismatch, no artefact, missing Cortex events). Reported separately, never averaged in. |
@@ -273,7 +274,7 @@ to test, not about the task.**
 **`tokens per task = tokens per LLM CALL × LLM calls per task`.** The two factors behave
 completely differently, so a raw total hides both.
 
-Note the unit: a *task* is one `claude -p` run; it makes **several LLM calls** (5–24 observed),
+Note the unit: a *task* is one `claude -p` run; it makes **several LLM calls** (2–29 observed),
 each re-sending the accumulated conversation. One measured task on `opus-5` looked like this —
 5 calls, prompt growing 27,060 → 29,276 as the conversation built up:
 
@@ -293,9 +294,9 @@ cells:
 
 | Model | Range | Spread | Reading |
 |---|---|---|---|
-| `haiku-4-5` | 0.97–1.05 | **0.07** | ≈ same context per LLM call |
-| `sonnet-5` | 1.19–1.30 | **0.11** | **≈1.23× more** per LLM call |
-| `opus-5` | 0.89–0.97 | **0.08** | **≈0.90× — leaner** per LLM call |
+| `haiku-4-5` | 0.97–1.04 | **0.07** | ≈ same context per LLM call |
+| `sonnet-5` | 1.18–1.24 | **0.05** | **≈1.21× more** per LLM call |
+| `opus-5` | 0.88–0.93 | **0.05** | **≈0.90× — leaner** per LLM call |
 
 **Factor 2 — LLM calls per task — is not constant**: 0.40–1.00× for haiku, 0.83–2.00× for
 `opus-5`, depending on the task. So a model has a stable appetite *per LLM call* that you can
@@ -310,19 +311,27 @@ Cost per **solved** task, scenario B (standard cache), `$` per task:
 
 | Task | `haiku-4-5` | `sonnet-4-6` | `sonnet-5` | `opus-5` |
 |---|---|---|---|---|
-| `xlsx-fin-colors` (ON) | **0.0386** | 0.1590 | 0.1678 | 0.2719 |
-| `xlsx-fin-font-clean` (ON) | **0.1075** ⚠️ | 0.1873 | 0.1332 | 0.2486 |
-| `cortex-pyfix-001` (no skill) | **0.0313** | 0.0837 | 0.0588 | 0.1030 |
+| `xlsx-fin-colors` (ON) | **0.0386** | 0.1746 | 0.1608 | 0.2719 |
+| `xlsx-fin-font-clean` (ON) | **0.1075** ⚠️ | 0.1896 | 0.1261 | 0.2486 |
+| `cortex-pyfix-001` (no skill) | **0.0313** | 0.0839 | 0.0588 | 0.1030 |
 
 ⚠️ haiku's figure already charges it for a 0.40 pass rate.
 
-Scenario A (no cache discount) for the same cells — **same ordering throughout**:
+Scenario A (no cache discount) for the same cells:
 
 | Task | `haiku-4-5` | `sonnet-4-6` | `sonnet-5` | `opus-5` |
 |---|---|---|---|---|
-| `xlsx-fin-colors` | 0.1409 | 0.5916 | 0.9080 | 1.1625 |
-| `xlsx-fin-font-clean` | 0.3364 | 0.8462 | 0.7035 | 1.1259 |
-| `cortex-pyfix-001` | 0.1597 | 0.4567 | 0.3113 | 0.5649 |
+| `xlsx-fin-colors` | 0.1409 | 0.6677 | 0.8920 | 1.1625 |
+| `xlsx-fin-font-clean` | 0.3364 | 0.8484 | 0.6625 | 1.1259 |
+| `cortex-pyfix-001` | 0.1597 | 0.4582 | 0.3113 | 0.5649 |
+
+**`haiku-4-5` is cheapest and `opus-5` dearest in every cell under both scenarios** — that much
+does not depend on the cache assumption. The middle of the field does: on `xlsx-fin-colors` the
+two sonnets **swap** between scenarios (B: `sonnet-5` 0.1608 < `sonnet-4-6` 0.1746; A: 0.8920 >
+0.6677). `sonnet-5` carries ~2.1× the tokens at 2/3 the unit price, so which one wins depends on
+how hard cache reads are discounted. On the other two cells `sonnet-5` is cheaper under both.
+Treat the top-and-bottom ranking as robust and the mid-band ordering on that one cell as
+contingent on §9.3.
 
 **`opus-5` used the fewest tokens on two of three cells and is the most expensive on all
 three.** That is the entire case for pricing the measurement rather than counting tokens.
@@ -344,7 +353,7 @@ inverted**:
 | Model | tokens/solved | rank | $/solved | rank |
 |---|---|---|---|---|
 | `opus-5` | 144,834 | **1st** | 0.1030 | **4th** |
-| `sonnet-4-6` | 196,634 | 2nd | 0.0842 | 3rd |
+| `sonnet-4-6` | 196,634 | 2nd | 0.0839 | 3rd |
 | `sonnet-5` | 200,732 | 3rd | 0.0588 | 2nd |
 | `haiku-4-5` | 204,034 | **4th** | 0.0313 | **1st** |
 
@@ -422,12 +431,15 @@ correct (fired nothing 3/3, so no over-eagerness).
 ## 8. Model selection recommendation
 
 **Adopt `claude-sonnet-5` as the default.** 100% pass on every task, and more
-**cost-efficient** than the incumbent `sonnet-4-6` in 2 of 3 cells — 29% on
-`xlsx-fin-font-clean`, 30% on the no-skill canary — *despite being less token-efficient*. Its
-2/3 unit price more than absorbs the 1.23× per-call context.
+**cost-efficient** than the incumbent `sonnet-4-6` in all 3 cells under scenario B — 33% on
+`xlsx-fin-font-clean`, 30% on the no-skill canary, 8% on `xlsx-fin-colors` — *despite being less
+token-efficient*. Its 2/3 unit price more than absorbs the 1.21× per-call context. The margin on
+`xlsx-fin-colors` is the thin one and it does not survive scenario A (§7.3); the other two cells
+hold under both.
 
-**Use `claude-haiku-4-5` only behind a validator.** Most cost-efficient in every cell by 2–4×
-and fastest (14–39 s vs 59–78 s). But it passed the harder compliance task only **40%** of the
+**Use `claude-haiku-4-5` only behind a validator.** Most cost-efficient in every cell, by 1.2–4.2×
+over the next cheapest model — the narrow 1.2× is on `xlsx-fin-font-clean`, the cell where its 0.40
+pass rate is already being charged for — and fastest (14–39 s vs 59–78 s). But it passed the harder compliance task only **40%** of the
 time *with the skill supplied*. What it actually got wrong, across the three failures:
 
 | Rep | Failure | Detectable by eye? |
@@ -461,15 +473,23 @@ are not tight — see limitations.
 
 1. **One skill.** Every skill-specific conclusion rests on `xlsx`. Whether "the skill is free
    on opus-5" is an opus property or an xlsx property is currently indistinguishable.
-2. **n=5–10 per cell, unevenly** — some CVs up to 0.85. The deliberate grid ran 5 reps per cell,
-   but earlier 3-rep sweeps of the same (task, arm, model) were pooled in, so *n* varies between
-   models within a row: read the `n` column rather than assuming 5. A 5-sample and a 10-sample
-   median are not equally trustworthy, and the unevenness is not by design — it is a consequence
-   of the profile having globbed the run directories, now pinned in `results/profile-manifest.json`.
-   The tokens-per-LLM-call constants are trustworthy because they reproduce across five
-   independent cells; individual cost figures are indicative.
-3. **Cache billing unverified** — the largest single uncertainty (4–5× on absolute cost),
-   though it does not change any ranking.
+2. **n=5 per cell** — 20 cells, 100 repetitions, and some CVs up to 0.85, so individual cost
+   figures are indicative rather than tight. The tokens-per-LLM-call constants are trustworthy
+   because they reproduce across five structurally different cells; a single cell's median is
+   not. Raising *n* would need new invocations, which is a spending decision, not a filter
+   change. Note that this grid *was* briefly uneven: pooling by (task, arm, model) had swept in
+   the earlier same-day development sweeps, which existed only for `sonnet-4-6` and `sonnet-5`,
+   so those two models sat at n=7–11 while haiku and opus sat at 5 — an uneven grid reported as
+   a flat "n=5". The 33 sweep repetitions are now excluded by name, each with its reason, in
+   `results/profile-manifest.json`; they remain on disk. Excluding them tightened the
+   tokens-per-call spreads (`sonnet-5` 0.11→0.05, `opus-5` 0.08→0.05) and moved no pass rate,
+   so the flat grid is also the cleaner measurement.
+3. **Cache billing unverified** — the largest single uncertainty (4–5× on absolute cost). It does
+   not change the conclusions that matter: `haiku-4-5` is cheapest and `opus-5` dearest in every
+   cell under both scenarios, and the token/cost inversion holds either way. It *does* decide one
+   mid-band ordering — `sonnet-5` vs `sonnet-4-6` on `xlsx-fin-colors` swaps between scenarios
+   (§7.3) — so do not quote that pair's ordering on that cell without settling the cache question
+   against a real invoice.
 4. **Two tasks in one narrow genre.** Both discriminators are financial-spreadsheet
    formatting. This is not a general coding benchmark.
 5. **`aws/` vs bare alias pricing** assumed identical; unprovable with a non-admin key.
@@ -496,11 +516,15 @@ python3 profile.py --report               # recompile from the manifest, no invo
 python3 pricing.py                        # the rate card
 ```
 
-Raw per-repetition records are in the gitignored `out/runs/` and `out/runs-archive/`. Which of
-them belong to this profile is pinned in `results/profile-manifest.json` (58 files, 193
-repetitions, with a sha256 each) — `--report` reads only those and says so loudly if one went
-missing or changed. Membership used to be a glob of both directories, which meant any later
-harness invocation silently joined a published cell; a one-rep canary on 2026-09-09 did exactly
-that and moved a median. `--report` also asserts two token identities per cell —
-`prompt == uncached + cacheRead + cacheWrite` and `total == prompt + completion` — and
-quarantines any cell that fails them. None did, across all 193 repetitions.
+Raw per-repetition records are in the gitignored `out/runs/` and `out/runs-archive/` — 194
+repetitions across 58 files. Which of them belong to this profile is pinned in
+`results/profile-manifest.json` (44 files, 160 repetitions, with a sha256 each; of those, the
+20 grid files supply the 100 repetitions in §7's tables, and the rest are the phase 2–3 task
+records). The 14 excluded files are listed there by name with a reason each — 13 pre-grid
+development sweeps and one preflight canary. `--report` reads only the manifest and says so
+loudly if a file went missing or changed. Membership used to be a glob of both directories,
+which meant any later harness invocation silently joined a published cell; a one-rep canary on
+2026-09-09 did exactly that and moved a median. `--report` also asserts two token identities per
+cell — `prompt == uncached + cacheRead + cacheWrite` and `total == prompt + completion` — and
+quarantines any cell that fails them. None did: 0 violations across all 194 recorded
+repetitions, excluded ones included.

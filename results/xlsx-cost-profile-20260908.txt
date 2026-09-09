@@ -15,27 +15,27 @@ as a real measurement, not as a formality.
 
 task                  arm  model        n  pass    tokens    CV calls tok/LLMc uncached    cacheR  cacheW    out   wall
 xlsx-fin-colors       on   haiku-4-5    5  1.00   192,703  0.23     5   38,541       32   153,580  14,840  3,379    39s
-xlsx-fin-colors       on   sonnet-4-6   9  1.00   257,611  0.33     7   36,802        9   215,502  16,818  5,433    71s
-xlsx-fin-colors       on   sonnet-5     8  1.00   573,855  0.38    12   47,821       24   547,406  22,595  5,475    78s
+xlsx-fin-colors       on   sonnet-4-6   5  1.00   266,640  0.30     7   38,091        9   245,258  17,939  5,926    70s
+xlsx-fin-colors       on   sonnet-5     5  1.00   565,306  0.42    12   47,109       24   541,178  24,086  4,310    62s
 xlsx-fin-colors       on   opus-5       5  1.00   284,825  0.85     8   35,603       16   264,551  14,987  5,271    71s
 
 xlsx-fin-colors       off  haiku-4-5    5  0.00    66,917  0.01     2   33,458       15    56,118   9,008  1,780    15s
-xlsx-fin-colors       off  sonnet-4-6   8  0.00   171,702  0.27     5   34,340        7   155,683  11,950  4,358    62s
-xlsx-fin-colors       off  sonnet-5     8  0.00   285,750  0.16     7   40,821       14   269,240  13,446  3,024    41s
+xlsx-fin-colors       off  sonnet-4-6   5  0.00   172,640  0.23     5   34,528        7   156,067  12,078  4,488    49s
+xlsx-fin-colors       off  sonnet-5     5  0.00   285,910  0.16     7   40,844       14   269,343  13,432  3,021    42s
 xlsx-fin-colors       off  opus-5       5  0.20   306,490  0.20    10   30,649       20   291,682   9,541  5,247    75s
 
 xlsx-fin-font-clean   on   haiku-4-5    5  0.40   158,387  0.48     4   39,597       27   138,287  15,832  4,585    38s
-xlsx-fin-font-clean   on   sonnet-4-6   7  1.00   350,461  0.17     9   38,940       12   325,855  17,025  5,651    77s
-xlsx-fin-font-clean   on   sonnet-5     8  1.00   446,052  0.30    10   46,953       19   422,309  19,534  4,189    59s
+xlsx-fin-font-clean   on   sonnet-4-6   5  1.00   350,461  0.18     9   38,940       13   325,855  17,176  5,815    69s
+xlsx-fin-font-clean   on   sonnet-5     5  1.00   420,459  0.38     9   46,718       18   397,438  19,154  3,849    52s
 xlsx-fin-font-clean   on   opus-5       5  1.00   277,638  0.08     8   34,705       16   260,317  13,586  4,476    64s
 
 xlsx-fin-font-clean   off  haiku-4-5    5  0.00    66,764  0.01     2   33,382       15    56,098   8,955  1,698    14s
-xlsx-fin-font-clean   off  sonnet-4-6   8  0.00   168,654  0.26     5   33,731        7   153,970  11,096  3,770    44s
-xlsx-fin-font-clean   off  sonnet-5    10  0.00   286,429  0.28     7   40,918       14   269,582  13,678  3,588    46s
+xlsx-fin-font-clean   off  sonnet-4-6   5  0.00   169,896  0.28     5   33,979        7   154,577  11,402  3,910    46s
+xlsx-fin-font-clean   off  sonnet-5     5  0.00   291,109  0.21     7   41,587       14   273,518  13,933  3,644    50s
 xlsx-fin-font-clean   off  opus-5       5  0.00   273,614  0.20     9   30,402       18   259,773   8,965  4,642    64s
 
 cortex-pyfix-001      on   haiku-4-5    5  1.00   204,034  0.07     6   34,006       43   190,840  11,075  1,644    22s
-cortex-pyfix-001      on   sonnet-4-6  10  1.00   195,868  0.12     6   32,645        8   184,613  10,244  1,091    25s
+cortex-pyfix-001      on   sonnet-4-6   5  1.00   196,634  0.07     6   32,772        8   185,230  10,193  1,103    19s
 cortex-pyfix-001      on   sonnet-5     5  1.00   200,732  0.00     5   40,146       10   187,844  11,862  1,014    23s
 cortex-pyfix-001      on   opus-5       5  1.00   144,834  0.09     5   28,967       10   136,749   6,127  1,153    22s
 
@@ -44,45 +44,45 @@ Is tokens per LLM CALL a MODEL property? (ratio vs sonnet-4-6, per cell)
 One task = one `claude -p` run = SEVERAL LLM calls, so this is per-call, not per-task.
 
 model       xlsx-fin-colors/on   xlsx-fin-colors/off  xlsx-fin-font-c/on   xlsx-fin-font-c/off  cortex-pyfix-00/on   spread
-haiku-4-5                   1.05                 0.97                 1.02                 0.99                 1.04 0.07  <= CONSTANT
+haiku-4-5                   1.01                 0.97                 1.02                 0.98                 1.04 0.07  <= CONSTANT
 sonnet-4-6                  1.00                 1.00                 1.00                 1.00                 1.00 0.00  <= CONSTANT
-sonnet-5                    1.30                 1.19                 1.21                 1.21                 1.23 0.11  <= CONSTANT
-opus-5                      0.97                 0.89                 0.89                 0.90                 0.89 0.08  <= CONSTANT
+sonnet-5                    1.24                 1.18                 1.20                 1.22                 1.23 0.05  <= CONSTANT
+opus-5                      0.93                 0.89                 0.89                 0.89                 0.88 0.05  <= CONSTANT
 
 ----------------------------------------------------------------------------------------------------
 Behaviour: LLM calls PER TASK, ratio vs sonnet-4-6 (task-dependent if it varies)
 
   haiku-4-5   xlsx-fin-color/on=0.71x  xlsx-fin-color/off=0.40x  xlsx-fin-font-/on=0.44x  xlsx-fin-font-/off=0.40x  cortex-pyfix-0/on=1.00x
   sonnet-4-6  xlsx-fin-color/on=1.00x  xlsx-fin-color/off=1.00x  xlsx-fin-font-/on=1.00x  xlsx-fin-font-/off=1.00x  cortex-pyfix-0/on=1.00x
-  sonnet-5    xlsx-fin-color/on=1.71x  xlsx-fin-color/off=1.40x  xlsx-fin-font-/on=1.06x  xlsx-fin-font-/off=1.40x  cortex-pyfix-0/on=0.83x
+  sonnet-5    xlsx-fin-color/on=1.71x  xlsx-fin-color/off=1.40x  xlsx-fin-font-/on=1.00x  xlsx-fin-font-/off=1.40x  cortex-pyfix-0/on=0.83x
   opus-5      xlsx-fin-color/on=1.14x  xlsx-fin-color/off=2.00x  xlsx-fin-font-/on=0.89x  xlsx-fin-font-/off=1.80x  cortex-pyfix-0/on=0.83x
 
 ----------------------------------------------------------------------------------------------------
 Cost per SOLVED task = median tokens / pass rate (undefined at pass rate 0)
 
 task                  arm         haiku-4-5       sonnet-4-6         sonnet-5           opus-5
-xlsx-fin-colors       on            192,703          257,611          573,855          284,825
+xlsx-fin-colors       on            192,703          266,640          565,306          284,825
 xlsx-fin-colors       off     undefined(0%)    undefined(0%)    undefined(0%)        1,532,450
-xlsx-fin-font-clean   on            395,968          350,461          446,052          277,638
+xlsx-fin-font-clean   on            395,968          350,461          420,459          277,638
 xlsx-fin-font-clean   off     undefined(0%)    undefined(0%)    undefined(0%)    undefined(0%)
-cortex-pyfix-001      on            204,034          195,868          200,732          144,834
+cortex-pyfix-001      on            204,034          196,634          200,732          144,834
 
 ----------------------------------------------------------------------------------------------------
 Skill-overhead multiple (xlsx ON / OFF tokens), per model
 
-  xlsx-fin-colors       haiku-4-5=2.88x  sonnet-4-6=1.50x  sonnet-5=2.01x  opus-5=0.93x
-  xlsx-fin-font-clean   haiku-4-5=2.37x  sonnet-4-6=2.08x  sonnet-5=1.56x  opus-5=1.01x
+  xlsx-fin-colors       haiku-4-5=2.88x  sonnet-4-6=1.54x  sonnet-5=1.98x  opus-5=0.93x
+  xlsx-fin-font-clean   haiku-4-5=2.37x  sonnet-4-6=2.06x  sonnet-5=1.44x  opus-5=1.01x
 
 ----------------------------------------------------------------------------------------------------
 Cache-read share of prompt tokens (how much context is re-read)
 
   haiku-4-5   xlsx-fin-color/on=81%  xlsx-fin-color/off=86%  xlsx-fin-font-/on=90%  xlsx-fin-font-/off=86%  cortex-pyfix-0/on=94%
-  sonnet-4-6  xlsx-fin-color/on=85%  xlsx-fin-color/off=93%  xlsx-fin-font-/on=95%  xlsx-fin-font-/off=93%  cortex-pyfix-0/on=95%
-  sonnet-5    xlsx-fin-color/on=96%  xlsx-fin-color/off=95%  xlsx-fin-font-/on=96%  xlsx-fin-font-/off=95%  cortex-pyfix-0/on=94%
+  sonnet-4-6  xlsx-fin-color/on=94%  xlsx-fin-color/off=93%  xlsx-fin-font-/on=95%  xlsx-fin-font-/off=93%  cortex-pyfix-0/on=95%
+  sonnet-5    xlsx-fin-color/on=96%  xlsx-fin-color/off=95%  xlsx-fin-font-/on=95%  xlsx-fin-font-/off=95%  cortex-pyfix-0/on=94%
   opus-5      xlsx-fin-color/on=95%  xlsx-fin-color/off=97%  xlsx-fin-font-/on=95%  xlsx-fin-font-/off=97%  cortex-pyfix-0/on=95%
 
 ====================================================================================================
-n per cell: 5-10 (see the n column; --reps was 5). CV on a median this small is indicative, not tight.
-membership: frozen manifest: 57 files, 1 deliberately excluded
+n per cell: 5 (20 cells; --reps was 5). CV on a 5-sample median is indicative, not tight.
+membership: frozen manifest: 44 files, 14 deliberately excluded
 No dollar figures: Cortex leaves costMicros unpopulated, so pricing would be
 invented. Tokens are split by tier above -- apply your own rates.
