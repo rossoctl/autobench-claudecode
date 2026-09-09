@@ -15,14 +15,16 @@ result against the internal LiteLLM rate card.
 
 | Use | Model | Why |
 |---|---|---|
-| Default for skill-driven document work | **`claude-sonnet-5`** | 100% pass on every task, and **cheaper than `sonnet-4-6` in 2 of 3 cells** despite using more tokens |
-| Cost-sensitive, tolerant of retries | **`claude-haiku-4-5`** | Cheapest in **every** cell by 2–4×, but only **40%** pass on the harder task |
-| Not indicated by this evidence | `claude-opus-5` | **Most expensive in every cell**, with no pass-rate advantage over sonnet |
+| Default for skill-driven document work | **`claude-sonnet-5`** | 100% pass on every task, and more **cost-efficient** than `sonnet-4-6` in 2 of 3 cells despite being *less* token-efficient |
+| Cost-sensitive, tolerant of retries | **`claude-haiku-4-5`** | Most **cost-efficient** in every cell by 2–4×, but only **40%** pass on the harder task |
+| Not indicated by this evidence | `claude-opus-5` | Least **cost-efficient** in every cell — though the *most token-efficient*, so it may suit token-bound rather than bill-bound work |
 
 Three findings that a simpler measurement would have got wrong:
 
-1. **Ranking on tokens picks the wrong model.** `opus-5` used the *fewest* tokens on two of
-   three cells yet is the *most expensive* everywhere, because it is priced 2.5× `sonnet-5`.
+1. **Token-efficiency and cost-efficiency are different measures, and they disagree.**
+   `opus-5` is the **most token-efficient** model tested and the **least cost-efficient**; on
+   `cortex-pyfix-001` the two rankings are exactly inverted. Quoting one number as
+   "efficiency" picks the answer by accident.
 2. **`sonnet-5` looks worse in tokens and better in dollars.** It used 2.2× `sonnet-4-6`'s
    tokens on one task, but at 2/3 the unit price it still wins overall.
 3. **Raw cost hides reliability.** `haiku` has the lowest token count on
@@ -65,12 +67,14 @@ These were conflated early in the work and are kept strictly separate.
 | **Task** | One unit of work: `prompt.md` + a fresh `workspace/`, optionally a hidden `verdict/`. |
 | **Verdict** | The programmatic pass test. A command's exit code — never a model's opinion. |
 | **Arm** | A condition applied to a task. `off` = skill unavailable (control), `on` = skill available and explicitly invoked, `select` = all skills available, none named. |
-| **Cell** | One (task × arm × model) combination, measured over *n* repetitions. |
+| **Cell** | One (task × arm × model) combination, measured over *n* repetitions. `xlsx-fin-colors` / `on` / `sonnet-5` at n=5 is one cell. The profile has 5 (task, arm) pairs × 4 models = **20 cells**. |
 | **Repetition** | One headless `claude -p` invocation in a fresh workspace. |
 | **Compliance task** | Asks for ordinary work; the hidden verdict checks whether a *skill convention* was followed. |
 | **Selection task** | Names no skill; the verdict is whether the model *chose* the right one. |
 | **Confound** | A repetition whose measurement is untrustworthy (foreign skill, subagent, model-pin mismatch, no artefact, missing Cortex events). Reported separately, never averaged in. |
-| **Cost per solved task** | `median tokens ÷ pass rate` — charges a model for its failures. |
+| **Token-efficiency** | Tokens consumed per **solved** task. What a context window, a rate limit or wall-clock latency actually sees. |
+| **Cost-efficiency** | Dollars per **solved** task — token-efficiency weighted by that model's unit price. |
+| **Cost per solved task** | `median ÷ pass rate`, so a model is charged for its failures. Applies to either measure above. |
 
 Note `workload-harness` (hyphenated) is a **proper noun** — an unrelated upstream project.
 It is never used here as a common noun.
@@ -291,20 +295,53 @@ Scenario A (no cache discount) for the same cells — **same ordering throughout
 **`opus-5` used the fewest tokens on two of three cells and is the most expensive on all
 three.** That is the entire case for pricing the measurement rather than counting tokens.
 
-### 7.4 Skill overhead is a property of skill × model
+### 7.4 Token-efficiency is not cost-efficiency
 
-Skill-on ÷ skill-off tokens:
+Two different questions, and they answer differently:
 
-| Task | `haiku-4-5` | `sonnet-4-6` | `sonnet-5` | `opus-5` |
+| | Token-efficiency | Cost-efficiency |
+|---|---|---|
+| Measures | tokens per solved task | dollars per solved task |
+| Binding when | context window, rate limits, latency | you are paying the bill |
+| Driven by | how much context, how many calls | the same, weighted by unit price |
+
+They diverge because unit price spans **5×** (haiku $0.76 → opus-5 $3.80 per 1M input), which
+swamps the ~2× spread in token counts. On `cortex-pyfix-001` the two rankings are **exactly
+inverted**:
+
+| Model | tokens/solved | rank | $/solved | rank |
 |---|---|---|---|---|
-| `xlsx-fin-colors` | 2.88× | 1.50× | 2.01× | **0.93×** |
-| `xlsx-fin-font-clean` | 2.37× | 2.08× | 1.56× | **1.01×** |
+| `opus-5` | 144,834 | **1st** | 0.1030 | **4th** |
+| `sonnet-4-6` | 196,634 | 2nd | 0.0842 | 3rd |
+| `sonnet-5` | 200,732 | 3rd | 0.0588 | 2nd |
+| `haiku-4-5` | 204,034 | **4th** | 0.0313 | **1st** |
 
-"What does this skill cost" has no single answer. `opus-5` absorbs it for free — largely
-because it already works ~2× the calls on the OFF arm, so the skill adds guidance rather than
-effort.
+**`opus-5` is the most token-efficient and the least cost-efficient model tested.** Quoting a
+single number and calling it "efficiency" picks the answer by accident. Where the two are
+reported together in this document, the measure is always named.
 
-### 7.5 Skill selection works
+### 7.5 Skill overhead is a property of skill × model
+
+Skill-on ÷ skill-off, in **both** measures — they differ, because the input/output/cache mix
+shifts between arms even at a fixed unit price:
+
+| Task | Measure | `haiku-4-5` | `sonnet-4-6` | `sonnet-5` | `opus-5` |
+|---|---|---|---|---|---|
+| `xlsx-fin-colors` | tokens | 2.88× | 1.50× | 2.01× | **0.93×** |
+| `xlsx-fin-colors` | **dollars** | 1.97× | 1.33× | 1.88× | **1.06×** |
+| `xlsx-fin-font-clean` | tokens | 2.37× | 2.08× | 1.56× | **1.01×** |
+| `xlsx-fin-font-clean` | **dollars** | 2.24× | 1.71× | 1.41× | **1.08×** |
+
+In dollars the skill adds **6–8% on opus-5** and roughly **doubles the bill on haiku**. Note
+opus-5's dollar overhead sits slightly *above* 1.0 even where its token overhead dips below —
+so "the skill is free on opus-5" is too strong; "barely noticeable" is accurate.
+
+"What does this skill cost" has no single answer. `opus-5` barely notices it because it
+already works ~2× the calls **without** the skill (10 vs 8 on `xlsx-fin-colors`), so the
+guidance replaces exploration rather than adding to it — which is why its token ratio can dip
+below 1.0 at all.
+
+### 7.6 Skill selection works
 
 All candidate skills present (`xlsx`/`docx`/`pptx`/`pdf`), prompt names none, verdict from
 the transcript. `sonnet-4-6`, n=3: **12/12 correct, 0 confounded** — including a prompt that
@@ -315,20 +352,22 @@ correct (fired nothing 3/3, so no over-eagerness).
 
 ## 8. Model selection recommendation
 
-**Adopt `claude-sonnet-5` as the default.** 100% pass on every task, and cheaper than the
-incumbent `sonnet-4-6` in 2 of 3 cells — 29% cheaper on `xlsx-fin-font-clean` and 30% on the
-no-skill canary — despite consuming *more* tokens. Its 2/3 unit price more than absorbs the
-1.23× per-call context.
+**Adopt `claude-sonnet-5` as the default.** 100% pass on every task, and more
+**cost-efficient** than the incumbent `sonnet-4-6` in 2 of 3 cells — 29% on
+`xlsx-fin-font-clean`, 30% on the no-skill canary — *despite being less token-efficient*. Its
+2/3 unit price more than absorbs the 1.23× per-call context.
 
-**Use `claude-haiku-4-5` where a retry is acceptable.** Cheapest in every cell by 2–4× and
-fastest (14–39 s vs 59–78 s). But it passed the harder compliance task only **40%** of the
-time *with the skill supplied*, so it is unsuitable where first-attempt correctness matters.
-Its economics survive its failures on these tasks; that will not hold as tasks get harder.
+**Use `claude-haiku-4-5` where a retry is acceptable.** Most cost-efficient in every cell by
+2–4× and fastest (14–39 s vs 59–78 s). But it passed the harder compliance task only **40%**
+of the time *with the skill supplied*, so it is unsuitable where first-attempt correctness
+matters. Its economics survive its failures on these tasks; that will not hold as tasks harden.
 
-**Do not default to `claude-opus-5` for this class of work.** Most expensive in all three
-cells (1.6–2.1× `sonnet-5`) with no pass-rate advantage. It is genuinely the most
-*token*-efficient and leanest per call, and it was the only model to solve a task unaided —
-so it may well justify itself on harder work. It does not on this evidence.
+**Do not default to `claude-opus-5` where the bill is the constraint.** Least cost-efficient
+in all three cells (1.6–2.1× `sonnet-5`) with no pass-rate advantage. But note the measure
+matters: it is the **most token-efficient** model tested and the leanest per call, and it was
+the only model to solve a task unaided. If the binding constraint is a context window, a rate
+limit or latency rather than the invoice, that verdict can reverse — which is precisely the
+argument for scoping the choice rather than picking one global default.
 
 **Confidence.** The pass-rate and cost orderings are robust: they hold across both pricing
 scenarios and, for `tokens/call`, across five independent cells. The absolute dollar figures

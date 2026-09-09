@@ -172,12 +172,13 @@ SECTIONS = [
         ("10", "A prediction of ours that was falsified"),
         ("11", "Two factors drive token cost"),
         ("12", "Money reverses the token conclusion"),
-        ("13", "Skill cost is a property of skill × model"),
-        ("14", "Skill selection is reliable"),
+        ("13", "Token-efficiency is not cost-efficiency"),
+        ("14", "Skill cost is a property of skill × model"),
+        ("15", "Skill selection is reliable"),
     ]),
     ("4 · Conclusion", [
-        ("15", "Model selection recommendation"),
-        ("16", "Limitations, stated plainly"),
+        ("16", "Model selection recommendation"),
+        ("17", "Limitations, stated plainly"),
     ]),
 ]
 COLS = [(0.7, SECTIONS[:2]), (6.9, SECTIONS[2:])]
@@ -261,12 +262,14 @@ tb(s, "These were conflated early in the work; they are kept strictly separate."
 rows = [["term", "meaning"],
         ["Harness", "the whole apparatus: tasks + driver + verdict + Cortex"],
         ["Arm", "off = skill unavailable (control) · on = skill invoked · select = none named"],
-        ["Cell", "one (task × arm × model), measured over n repetitions"],
+        ["Cell", "one (task × arm × model), measured over n repetitions — e.g. xlsx-fin-colors / ON / sonnet-5, n=5"],
         ["Compliance task", "ordinary request; hidden verdict checks a skill convention was followed"],
         ["Selection task", "names no skill; verdict is whether the model chose the right one"],
         ["Confound", "a repetition whose measurement is untrustworthy — reported, never averaged"],
-        ["Cost per solved task", "median tokens ÷ pass rate — charges a model for its failures"]]
-table(s, rows, 0.7, 2.45, 11.9, [2.6, 9.3], size=13)
+        ["Token-efficiency", "tokens consumed per SOLVED task — what the context window and rate limits see"],
+        ["Cost-efficiency", "dollars per SOLVED task — token-efficiency weighted by that model's unit price"],
+        ["Cost per solved task", "median ÷ pass rate, so a model is charged for its failures"]]
+table(s, rows, 0.7, 2.45, 11.9, [2.6, 9.3], size=12)
 tb(s, "‘workload-harness’ (hyphenated) is a proper noun for an unrelated upstream project — never used here as a common noun.",
    0.7, 5.35, 11.9, 0.3, 12, color=MUTED)
 
@@ -429,25 +432,53 @@ table(s, rows_a, 0.7, 5.7, 11.9, [3.9, 2.0, 2.0, 2.0, 2.0], size=12,
 tb(s, "haiku's 0.1075 already charges it for a 0.40 pass rate — it is cheapest even after paying for its failures.",
    0.7, 3.7, 11.9, 0.3, 12, color=WARN)
 
+# ──────────────────────── 13. token-efficiency vs cost-efficiency
+s = prs.slides.add_slide(BLANK); bg(s, PAPER)
+slide_title(s, "Token-efficiency is not cost-efficiency", "finding 4 · two different questions")
+rows = [["", "token-efficiency", "cost-efficiency"],
+        ["measures", "tokens per SOLVED task", "dollars per SOLVED task"],
+        ["binding when", "context window, rate limits, latency", "you are paying the bill"],
+        ["driven by", "how much context and how many calls", "the same, weighted by unit price"]]
+table(s, rows, 0.7, 1.95, 11.9, [2.3, 4.8, 4.8], size=13)
+tb(s, "They diverge because unit price spans 5× (haiku $0.76 → opus-5 $3.80 per 1M input), which swamps the\n"
+      "~2× spread in token counts. On cortex-pyfix-001 the two rankings are EXACTLY INVERTED:",
+   0.7, 3.5, 11.9, 0.55, 13, color=BODY)
+rows2 = [["model", "tokens/solved", "rank", "$/solved", "rank"],
+         ["opus-5", "144,834", "1st", "0.1030", "4th"],
+         ["sonnet-4-6", "196,634", "2nd", "0.0842", "3rd"],
+         ["sonnet-5", "200,732", "3rd", "0.0588", "2nd"],
+         ["haiku-4-5", "204,034", "4th", "0.0313", "1st"]]
+table(s, rows2, 0.7, 4.15, 11.9, [3.1, 2.6, 1.6, 2.6, 1.6], size=13,
+      highlight={(1, 2): GOOD, (1, 4): WARN, (4, 2): WARN, (4, 4): GOOD})
+box(s, "opus-5 is the MOST token-efficient and the LEAST cost-efficient model tested.\n"
+      "Quoting one number and calling it “efficiency” picks the answer by accident.",
+    0.7, 5.95, 11.2, 0.8, fill=INK, color=RGBColor(0xFF, 0xFF, 0xFF), size=14, bold=True)
+
 # ─────────────────────────────────────────────────────────── 12. finding: skill overhead
 s = prs.slides.add_slide(BLANK); bg(s, PAPER)
-slide_title(s, "Skill cost is a property of skill × model", "finding 4 · overhead")
-tb(s, "skill-on ÷ skill-off tokens, same skill (xlsx), same tasks", 0.7, 1.95, 11.9, 0.3, 14, color=MUTED)
-rows = [["task", "haiku-4-5", "sonnet-4-6", "sonnet-5", "opus-5"],
-        ["xlsx-fin-colors", "2.88×", "1.50×", "2.01×", "0.93×"],
-        ["xlsx-fin-font-clean", "2.37×", "1.08×" if False else "2.08×", "1.56×", "1.01×"]]
-table(s, rows, 0.7, 2.4, 11.9, [3.9, 2.0, 2.0, 2.0, 2.0], size=15,
-      highlight={(1, 1): WARN, (2, 1): WARN, (1, 4): GOOD, (2, 4): GOOD})
-tb(s, "“What does this skill cost?” has no single answer.", 0.7, 3.65, 11.9, 0.35, 17, color=INK, bold=True)
-tb(s, "opus-5 absorbs the skill for free (0.93× / 1.01×) — largely because it already works ~2× the calls on the\n"
-      "OFF arm, so the guidance replaces effort rather than adding to it. On haiku the same skill costs ~2.5×.\n\n"
-      "Caveat: this rests on ONE skill. Whether “free on opus-5” is an opus property or an xlsx property is\n"
-      "currently indistinguishable — three more tasks on docx / pptx / pdf would separate them.",
-   0.7, 4.1, 11.9, 1.6, 14, color=BODY, spacing=4)
+slide_title(s, "Skill cost is a property of skill × model", "finding 5 · overhead")
+tb(s, "skill-on ÷ skill-off, same skill (xlsx), same task, same model. Tokens AND dollars — they differ,\n"
+      "because the input/output/cache mix shifts between arms even at a fixed unit price.",
+   0.7, 1.9, 11.9, 0.55, 13, color=MUTED)
+rows = [["task / measure", "haiku-4-5", "sonnet-4-6", "sonnet-5", "opus-5"],
+        ["xlsx-fin-colors — tokens", "2.88×", "1.50×", "2.01×", "0.93×"],
+        ["xlsx-fin-colors — dollars", "1.97×", "1.33×", "1.88×", "1.06×"],
+        ["xlsx-fin-font-clean — tokens", "2.37×", "2.08×", "1.56×", "1.01×"],
+        ["xlsx-fin-font-clean — dollars", "2.24×", "1.71×", "1.41×", "1.08×"]]
+table(s, rows, 0.7, 2.6, 11.9, [3.9, 2.0, 2.0, 2.0, 2.0], size=13,
+      highlight={(1, 1): WARN, (2, 1): WARN, (3, 1): WARN, (4, 1): WARN,
+                 (1, 4): GOOD, (2, 4): GOOD, (3, 4): GOOD, (4, 4): GOOD})
+tb(s, "“What does this skill cost?” has no single answer.", 0.7, 4.4, 11.9, 0.35, 17, color=INK, bold=True)
+tb(s, "On opus-5 the skill adds only 6–8% in dollars; on haiku it roughly doubles the bill. Opus-5 barely notices it\n"
+      "because it already works ~2× the calls WITHOUT the skill (10 vs 8 on colors), so the guidance replaces\n"
+      "exploration rather than adding to it. That is why its token ratio can dip below 1.0.\n\n"
+      "Caveat: this rests on ONE skill. Whether the effect belongs to opus-5 or to xlsx is currently\n"
+      "indistinguishable — three more tasks on docx / pptx / pdf would separate them.",
+   0.7, 4.85, 11.9, 1.8, 13, color=BODY, spacing=3)
 
 # ─────────────────────────────────────────────────────────── 13. selection
 s = prs.slides.add_slide(BLANK); bg(s, PAPER)
-slide_title(s, "Skill selection is reliable", "finding 5 · selection")
+slide_title(s, "Skill selection is reliable", "finding 6 · selection")
 tb(s, "All four candidate skills present, prompt names none, verdict read from the transcript.\n"
       "sonnet-4-6, n=3 per task — 12/12 correct, 0 confounded.",
    0.7, 1.95, 11.9, 0.6, 15, color=BODY)
