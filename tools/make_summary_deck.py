@@ -263,13 +263,15 @@ rows = [["term", "meaning"],
         ["Harness", "the whole apparatus: tasks + driver + verdict + Cortex"],
         ["Arm", "off = skill unavailable (control) · on = skill invoked · select = none named"],
         ["Cell", "one (task × arm × model), measured over n repetitions — e.g. xlsx-fin-colors / ON / sonnet-5, n=5"],
+        ["Task / repetition", "ONE headless `claude -p` invocation in a fresh workspace"],
+        ["LLM call", "ONE /v1/chat/completions on the wire. A task makes SEVERAL — 5 to 24 here"],
         ["Compliance task", "ordinary request; hidden verdict checks a skill convention was followed"],
         ["Selection task", "names no skill; verdict is whether the model chose the right one"],
         ["Confound", "a repetition whose measurement is untrustworthy — reported, never averaged"],
         ["Token-efficiency", "tokens consumed per SOLVED task — what the context window and rate limits see"],
         ["Cost-efficiency", "dollars per SOLVED task — token-efficiency weighted by that model's unit price"],
         ["Cost per solved task", "median ÷ pass rate, so a model is charged for its failures"]]
-table(s, rows, 0.7, 2.45, 11.9, [2.6, 9.3], size=12)
+table(s, rows, 0.7, 2.4, 11.9, [2.6, 9.3], size=11.5)
 tb(s, "‘workload-harness’ (hyphenated) is a proper noun for an unrelated upstream project — never used here as a common noun.",
    0.7, 5.35, 11.9, 0.3, 12, color=MUTED)
 
@@ -386,21 +388,22 @@ box(s, "“The measure is saturated” is a claim about the models you happened 
 # ─────────────────────────────────────────────────────────── 10. finding: decomposition
 s = prs.slides.add_slide(BLANK); bg(s, PAPER)
 slide_title(s, "Two factors drive token cost", "finding 2 · decomposition")
-box(s, "total tokens   =   tokens per call   ×   number of calls\n"
-      "                       (a MODEL property)        (a TASK property)",
-    0.7, 1.9, 11.7, 0.75, fill=RGBColor(0xFF, 0xFF, 0xFF), size=15, bold=True, color=INK)
-tb(s, "Factor 1 — tokens per call: ratio vs sonnet-4-6, across five structurally different cells",
+box(s, "tokens per task   =   tokens per LLM CALL   ×   LLM calls per task\n"
+      "                              (a MODEL property)              (a TASK property)",
+    0.7, 1.88, 11.7, 0.78, fill=RGBColor(0xFF, 0xFF, 0xFF), size=15, bold=True, color=INK)
+tb(s, "Factor 1 — tokens per LLM call: ratio vs sonnet-4-6, across five structurally different cells",
    0.7, 2.8, 11.9, 0.3, 14, color=MUTED)
 rows = [["model", "range", "spread", "reading"],
-        ["haiku-4-5", "0.97 – 1.05", "0.07", "≈ same per-call context"],
-        ["sonnet-5", "1.19 – 1.30", "0.11", "≈1.23× more per call"],
-        ["opus-5", "0.89 – 0.97", "0.08", "≈0.90× — leaner per call"]]
+        ["haiku-4-5", "0.97 – 1.05", "0.07", "≈ same context per LLM call"],
+        ["sonnet-5", "1.19 – 1.30", "0.11", "≈1.23× more per LLM call"],
+        ["opus-5", "0.89 – 0.97", "0.08", "≈0.90× — leaner per LLM call"]]
 table(s, rows, 0.7, 3.2, 11.9, [2.4, 2.6, 1.7, 5.2], size=14, highlight={(3, 3): GOOD})
-tb(s, "Factor 2 — number of calls: NOT constant. 0.40–1.00× for haiku, 0.83–2.00× for opus-5, by task.",
+tb(s, "Factor 2 — LLM calls per task: NOT constant. 0.40–1.00× for haiku, 0.83–2.00× for opus-5, by task.",
    0.7, 4.7, 11.9, 0.35, 15, color=WARN, bold=True)
-box(s, "So a model has a stable per-call appetite you can budget with — but how many calls it\n"
-      "takes depends on the job. A raw token total multiplies the two and hides both.",
-    0.7, 5.15, 11.7, 0.85, fill=RGBColor(0xFF, 0xFF, 0xFF), size=14, bold=True, color=INK)
+box(s, "One TASK is one `claude -p` run and makes SEVERAL LLM calls (5–24 observed), each re-sending the\n"
+      "growing conversation. A model has a stable appetite per LLM call — how many calls the job needs is a\n"
+      "separate matter. A raw token total multiplies the two and hides both.",
+    0.7, 5.12, 11.7, 0.95, fill=RGBColor(0xFF, 0xFF, 0xFF), size=13, bold=True, color=INK)
 tb(s, "Cache reads are 81–97% of prompt tokens in every cell — highest on sonnet-5 and opus-5. Reporting\n"
       "“input tokens” alone for this workload is meaningless.", 0.7, 6.15, 11.9, 0.6, 13, color=MUTED)
 
@@ -443,7 +446,7 @@ table(s, rows, 0.7, 1.95, 11.9, [2.3, 4.8, 4.8], size=13)
 tb(s, "They diverge because unit price spans 5× (haiku $0.76 → opus-5 $3.80 per 1M input), which swamps the\n"
       "~2× spread in token counts. On cortex-pyfix-001 the two rankings are EXACTLY INVERTED:",
    0.7, 3.5, 11.9, 0.55, 13, color=BODY)
-rows2 = [["model", "tokens/solved", "rank", "$/solved", "rank"],
+rows2 = [["model", "tokens/solved task", "rank", "$/solved task", "rank"],
          ["opus-5", "144,834", "1st", "0.1030", "4th"],
          ["sonnet-4-6", "196,634", "2nd", "0.0842", "3rd"],
          ["sonnet-5", "200,732", "3rd", "0.0588", "2nd"],

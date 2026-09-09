@@ -68,7 +68,8 @@ These were conflated early in the work and are kept strictly separate.
 | **Verdict** | The programmatic pass test. A command's exit code — never a model's opinion. |
 | **Arm** | A condition applied to a task. `off` = skill unavailable (control), `on` = skill available and explicitly invoked, `select` = all skills available, none named. |
 | **Cell** | One (task × arm × model) combination, measured over *n* repetitions. `xlsx-fin-colors` / `on` / `sonnet-5` at n=5 is one cell. The profile has 5 (task, arm) pairs × 4 models = **20 cells**. |
-| **Repetition** | One headless `claude -p` invocation in a fresh workspace. |
+| **Repetition** (= one task run) | One headless `claude -p` invocation in a fresh workspace. |
+| **LLM call** | One `/v1/chat/completions` request/response on the wire. **A single task makes several** — 5 to 24 in these runs — each re-sending the growing conversation. |
 | **Compliance task** | Asks for ordinary work; the hidden verdict checks whether a *skill convention* was followed. |
 | **Selection task** | Names no skill; the verdict is whether the model *chose* the right one. |
 | **Confound** | A repetition whose measurement is untrustworthy (foreign skill, subagent, model-pin mismatch, no artefact, missing Cortex events). Reported separately, never averaged in. |
@@ -256,19 +257,39 @@ two mid-tier models it was observed on.** Widening the tiers broke it in both di
 **Generalisable lesson: "the measure is saturated" is a claim about the models you happened
 to test, not about the task.**
 
-### 7.2 Tokens — one term is a model constant, the other is not
+### 7.2 Tokens — two factors, only one of which is a model property
 
-`tokens/call` ratio vs `sonnet-4-6`, across five structurally different cells:
+**`tokens per task = tokens per LLM CALL × LLM calls per task`.** The two factors behave
+completely differently, so a raw total hides both.
+
+Note the unit: a *task* is one `claude -p` run; it makes **several LLM calls** (5–24 observed),
+each re-sending the accumulated conversation. One measured task on `opus-5` looked like this —
+5 calls, prompt growing 27,060 → 29,276 as the conversation built up:
+
+| LLM call | prompt | completion | total |
+|---|---|---|---|
+| 1 | 27,060 | 142 | 27,202 |
+| 2 | 27,441 | 217 | 27,658 |
+| 3 | 28,370 | 469 | 28,839 |
+| 4 | 29,145 | 142 | 29,287 |
+| 5 | 29,276 | 163 | 29,439 |
+
+That re-sending is also why cache reads dominate: each call's prompt is mostly the previous
+turn's context.
+
+**Factor 1 — tokens per LLM call.** Ratio vs `sonnet-4-6`, across five structurally different
+cells:
 
 | Model | Range | Spread | Reading |
 |---|---|---|---|
-| `haiku-4-5` | 0.97–1.05 | **0.07** | ≈ same per-call context |
-| `sonnet-5` | 1.19–1.30 | **0.11** | **≈1.23× more** per call |
-| `opus-5` | 0.89–0.97 | **0.08** | **≈0.90× — leaner** per call |
+| `haiku-4-5` | 0.97–1.05 | **0.07** | ≈ same context per LLM call |
+| `sonnet-5` | 1.19–1.30 | **0.11** | **≈1.23× more** per LLM call |
+| `opus-5` | 0.89–0.97 | **0.08** | **≈0.90× — leaner** per LLM call |
 
-**Call count is not constant** — 0.40–1.00× for haiku, 0.83–2.00× for opus-5 by task. So
-decompose: the stable term is the model, the variable term is the work. Reporting raw totals
-conflates them.
+**Factor 2 — LLM calls per task — is not constant**: 0.40–1.00× for haiku, 0.83–2.00× for
+`opus-5`, depending on the task. So a model has a stable appetite *per LLM call* that you can
+budget with, while how many calls a job needs is a separate matter. Reporting raw token totals
+multiplies the two and conflates them.
 
 Cache reads are **81–97% of prompt tokens** in every cell (highest on `sonnet-5`/`opus-5`).
 
@@ -364,13 +385,13 @@ matters. Its economics survive its failures on these tasks; that will not hold a
 
 **Do not default to `claude-opus-5` where the bill is the constraint.** Least cost-efficient
 in all three cells (1.6–2.1× `sonnet-5`) with no pass-rate advantage. But note the measure
-matters: it is the **most token-efficient** model tested and the leanest per call, and it was
+matters: it is the **most token-efficient** model tested and the leanest per LLM call, and it was
 the only model to solve a task unaided. If the binding constraint is a context window, a rate
 limit or latency rather than the invoice, that verdict can reverse — which is precisely the
 argument for scoping the choice rather than picking one global default.
 
 **Confidence.** The pass-rate and cost orderings are robust: they hold across both pricing
-scenarios and, for `tokens/call`, across five independent cells. The absolute dollar figures
+scenarios and, for tokens per LLM call, across five independent cells. The absolute dollar figures
 are not tight — see limitations.
 
 ---
@@ -379,7 +400,7 @@ are not tight — see limitations.
 
 1. **One skill.** Every skill-specific conclusion rests on `xlsx`. Whether "the skill is free
    on opus-5" is an opus property or an xlsx property is currently indistinguishable.
-2. **n=5 per cell**, some CVs up to 0.85. The `tokens/call` constants are trustworthy because
+2. **n=5 per cell**, some CVs up to 0.85. The tokens-per-LLM-call constants are trustworthy because
    they reproduce across five independent cells; individual cost figures are indicative.
 3. **Cache billing unverified** — the largest single uncertainty (4–5× on absolute cost),
    though it does not change any ranking.

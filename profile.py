@@ -11,8 +11,9 @@ Two modes so the analysis is never coupled to a 2-hour run:
     profile.py --report    recompile from out/runs, no invocations
 
 Reported per cell and then across models:
-  * tokens/call        per-call context -- suspected to be a MODEL constant
-  * llm_calls          behaviour -- suspected to be TASK-dependent
+  * tok/LLMcall        tokens per LLM CALL (one /v1/chat/completions) -- a MODEL constant.
+                       NOTE one task = one `claude -p` run and makes SEVERAL LLM calls.
+  * llm_calls          LLM calls per task -- TASK-dependent, not a model property
   * cache tiers        uncached / cacheRead / cacheWrite, and cache-read share
   * cost per solved task = median tokens / pass rate (undefined at pass rate 0)
   * skill-overhead multiple, from the OFF arm of each xlsx task
@@ -148,7 +149,7 @@ def report(reps):
 
     # ---- per-cell table
     print(f"{'task':21} {'arm':4} {'model':11} {'n':>2} {'pass':>5} {'tokens':>9} {'CV':>5} "
-          f"{'calls':>5} {'tok/call':>8} {'uncached':>8} {'cacheR':>9} {'cacheW':>7} {'out':>6} {'wall':>6}")
+          f"{'calls':>5} {'tok/LLMc':>8} {'uncached':>8} {'cacheR':>9} {'cacheW':>7} {'out':>6} {'wall':>6}")
     for task, arm in CELLS:
         for m in MODELS:
             c = cells.get((task, arm, m))
@@ -163,9 +164,10 @@ def report(reps):
 
     base = "claude-sonnet-4-6"
 
-    # ---- Q: is tokens/call a MODEL constant or a task interaction?
+    # ---- Q: is tokens-per-LLM-call a MODEL constant or a task interaction?
     print("-" * 100)
-    print("Is tokens/call a MODEL property? (ratio vs sonnet-4-6, per task)\n")
+    print("Is tokens per LLM CALL a MODEL property? (ratio vs sonnet-4-6, per cell)")
+    print("One task = one `claude -p` run = SEVERAL LLM calls, so this is per-call, not per-task.\n")
     print(f"{'model':11} " + " ".join(f"{t[:15]+'/'+a:20}" for t, a in CELLS) + " spread")
     for m in MODELS:
         ratios, cellsr = [], []
@@ -184,7 +186,7 @@ def report(reps):
 
     # ---- Q: does the model change behaviour (call count) for identical work?
     print("\n" + "-" * 100)
-    print("Behaviour: llm_calls ratio vs sonnet-4-6 (task-dependent if it varies)\n")
+    print("Behaviour: LLM calls PER TASK, ratio vs sonnet-4-6 (task-dependent if it varies)\n")
     for m in MODELS:
         parts = []
         for task, arm in CELLS:

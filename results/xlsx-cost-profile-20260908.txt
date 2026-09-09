@@ -13,7 +13,7 @@ mid-tier models it was observed on. Resolution exists at BOTH ends:
 So these tasks DO rank models, below and above the sonnet band. Read pass rate
 as a real measurement, not as a formality.
 
-task                  arm  model        n  pass    tokens    CV calls tok/call uncached    cacheR  cacheW    out   wall
+task                  arm  model        n  pass    tokens    CV calls tok/LLMc uncached    cacheR  cacheW    out   wall
 xlsx-fin-colors       on   haiku-4-5    5  1.00   192,703  0.23     5   38,541       32   153,580  14,840  3,379    39s
 xlsx-fin-colors       on   sonnet-4-6   9  1.00   257,611  0.33     7   36,802        9   215,502  16,818  5,433    71s
 xlsx-fin-colors       on   sonnet-5     8  1.00   573,855  0.38    12   47,821       24   547,406  22,595  5,475    78s
@@ -40,7 +40,8 @@ cortex-pyfix-001      on   sonnet-5     5  1.00   200,732  0.00     5   40,146  
 cortex-pyfix-001      on   opus-5       5  1.00   144,834  0.09     5   28,967       10   136,749   6,127  1,153    22s
 
 ----------------------------------------------------------------------------------------------------
-Is tokens/call a MODEL property? (ratio vs sonnet-4-6, per task)
+Is tokens per LLM CALL a MODEL property? (ratio vs sonnet-4-6, per cell)
+One task = one `claude -p` run = SEVERAL LLM calls, so this is per-call, not per-task.
 
 model       xlsx-fin-colors/on   xlsx-fin-colors/off  xlsx-fin-font-c/on   xlsx-fin-font-c/off  cortex-pyfix-00/on   spread
 haiku-4-5                   1.05                 0.97                 1.02                 0.99                 1.04 0.07  <= CONSTANT
@@ -49,7 +50,7 @@ sonnet-5                    1.30                 1.19                 1.21      
 opus-5                      0.97                 0.89                 0.89                 0.90                 0.89 0.08  <= CONSTANT
 
 ----------------------------------------------------------------------------------------------------
-Behaviour: llm_calls ratio vs sonnet-4-6 (task-dependent if it varies)
+Behaviour: LLM calls PER TASK, ratio vs sonnet-4-6 (task-dependent if it varies)
 
   haiku-4-5   xlsx-fin-color/on=0.71x  xlsx-fin-color/off=0.40x  xlsx-fin-font-/on=0.44x  xlsx-fin-font-/off=0.40x  cortex-pyfix-0/on=1.00x
   sonnet-4-6  xlsx-fin-color/on=1.00x  xlsx-fin-color/off=1.00x  xlsx-fin-font-/on=1.00x  xlsx-fin-font-/off=1.00x  cortex-pyfix-0/on=1.00x

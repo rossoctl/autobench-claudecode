@@ -212,15 +212,19 @@ it was observed on, and **broke as soon as the tiers widened**:
 (`xlsx-fin-font-clean` ON for haiku; `xlsx-fin-colors` OFF for opus-5.) So a compliance task
 does have resolution — just not between models that both sit above the ceiling.
 
-### tokens/call is a model constant; call count is not
+### Tokens per LLM call is a model constant; calls per task is not
+
+`tokens per task = tokens per LLM CALL × LLM calls per task`. One task is one
+`claude -p` run and makes **several** LLM calls (5–24 observed), each re-sending the
+growing conversation — which is also why cache reads dominate.
 
 Ratio vs `sonnet-4-6`, across five structurally different cells:
 
 | model | spread across cells | reading |
 |---|---|---|
-| `haiku-4-5` | 0.97–1.05, **spread 0.07** | ≈ same per-call context |
-| `sonnet-5` | 1.19–1.30, **spread 0.11** | **≈1.23× more** per call |
-| `opus-5` | 0.89–0.97, **spread 0.08** | **≈0.90× — leaner** per call |
+| `haiku-4-5` | 0.97–1.05, **spread 0.07** | ≈ same context per LLM call |
+| `sonnet-5` | 1.19–1.30, **spread 0.11** | **≈1.23× more** per LLM call |
+| `opus-5` | 0.89–0.97, **spread 0.08** | **≈0.90× — leaner** per LLM call |
 
 Per-call context is stable enough to budget with. **Call count is not**: it swings 0.40–1.00×
 for haiku and 0.83–2.00× for opus-5 depending on the task. So decompose — the constant term
@@ -318,7 +322,7 @@ Two subtleties learned the hard way:
 A skill's token cost is a property of **skill × task**, not of the skill. Measured across
 both surviving tasks with the *same* `xlsx` skill:
 
-| task | tokens/call OFF → ON | llm calls OFF → ON | total |
+| task | tokens per LLM call OFF → ON | LLM calls per task OFF → ON | total |
 |---|---|---|---|
 | `xlsx-fin-colors` | 33,568 → 36,977 (**+3,409**) | 5 → 5 (+0%) | **+10%** |
 | `xlsx-fin-font-clean` | 33,482 → 36,805 (**+3,323**) | 5 → **10** (+100%) | **+120%** |
@@ -328,7 +332,7 @@ The per-call increase is a near-constant ~3.3–3.4k, matching the injected `SKI
 made the agent do twice as much work on one task and no extra work on the other.
 
 So a bigger skill bundle is *not* inherently more expensive: only 1 of 6 skill-on runs read
-anything from the skill's 54-file `scripts/` directory. Compare **tokens per call** to see
+anything from the skill's 54-file `scripts/` directory. Compare **tokens per LLM call** to see
 the skill text, and **call count** to see the behavioural cost. Comparing raw totals across
 skills measures task shape instead.
 
