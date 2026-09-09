@@ -113,7 +113,13 @@ Skill-on cost, same tasks, same model:
 |---|---|---|---|
 | `xlsx` | 167k → 185k (+10%) | 82s → 80s | **0/3 → 3/3** |
 | `docx` | 160k → 1.03M (**6.5×**) | 27s → 501s (**18×**) | none (both pass) |
-| `pptx` | 132k → 2.34M (**18×**) | 35s → 393s (**11×**) | none (both pass) |
+| `pptx` | 164k → 491k (**3.0×**) | 35s → 393s (**11×**) | none (both pass) |
+
+⚠️ The `pptx` figure was previously published as **18×**, from a median that included two
+repetitions in which the agent spawned **downstream work** (an `Agent` subagent or a
+background task). Those calls are real and billed, but they are not attributable to the task's
+own agent loop, so they do not belong in a skill-overhead ratio. Excluding them gives 3.0×.
+See "Downstream LLM calls" below.
 
 The docx and pptx skills route through Node toolchains (docx-js, pptxgenjs) with npm
 installs and LibreOffice validation loops. That is a real cost worth knowing about, but it
@@ -273,6 +279,42 @@ window** against one shared proxy, so two overlapping runs interleave — a smok
 beside a sweep picked up the sweep's events and was flagged `multiple_models`. The detector
 caught it; the lock makes it impossible. Interactive Claude Code on the same machine is
 still safe, because it has no `HTTPS_PROXY` and so never enters the window.
+
+### Downstream LLM calls
+
+An LLM call can trigger further LLM calls — a subagent (`Agent`) runs its own agent loop, and
+background tasks run asynchronously. **Cortex counts all of them**, because the child's
+`HTTPS_PROXY` is inherited by its subprocesses, so a subagent's traffic traverses the same
+proxy and appears as ordinary response events inside the measurement window. For **cost**
+that is exactly right: those calls are real and billed.
+
+**But they are not attributable.** On the wire a subagent's call is indistinguishable from the
+main loop's. So:
+
+| Measure | Effect of downstream work |
+|---|---|
+| total tokens / dollars | **correct** — the calls really happened |
+| tokens per LLM call | **unaffected** — still that model's per-call average |
+| LLM calls per task | **inflated** — the "task" is no longer one agent loop |
+| skill-overhead ratios | **invalid** — mixes two different amounts of work |
+
+Measured impact where it occurred: **2.7×–8.2× the tokens** versus other repetitions of the
+same cell.
+
+| Cell | with downstream | without |
+|---|---|---|
+| `pptx-body-left-aligned` ON | 26 calls / 1,255,632 | 10 calls / 458,514 |
+| `pptx-size-contrast` ON | 36 calls / 1,908,134 | 10 calls / 491,474 |
+| `select-deck` SELECT | 46 calls / 2,485,834 | 7 calls / 302,900 |
+
+The harness therefore flags such repetitions as confounded (`subagent_invoked`,
+`background_task_used`) rather than averaging them in. **This detector was broken until
+2026-09-09**: it matched only a tool named `Task`, while this Claude Code build names the
+subagent tool `Agent`, so five affected repetitions passed as clean. Fixed and unit-tested
+against both names.
+
+**The xlsx cost profile is unaffected** — 0 of the 5 affected repetitions fall in its 20
+cells; all were in the retired `pptx` tasks and one `select` task.
 
 ## Isolation, and why it is per-invocation
 

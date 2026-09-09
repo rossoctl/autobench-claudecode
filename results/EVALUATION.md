@@ -341,7 +341,44 @@ inverted**:
 single number and calling it "efficiency" picks the answer by accident. Where the two are
 reported together in this document, the measure is always named.
 
-### 7.5 Skill overhead is a property of skill × model
+### 7.5 Downstream LLM calls: counted, but not attributable
+
+An LLM call can trigger further LLM calls — a subagent (`Agent`) runs its own agent loop, and
+background tasks run asynchronously. **Cortex counts all of them**: the child's `HTTPS_PROXY`
+is inherited by its subprocesses, so a subagent's traffic crosses the same proxy and lands in
+the measurement window as ordinary response events. For cost that is correct — those calls
+are real and billed.
+
+**They are not attributable, though.** On the wire a subagent's call looks exactly like the
+main loop's, so:
+
+| Measure | Effect |
+|---|---|
+| total tokens / dollars | **correct** — the calls really happened |
+| tokens per LLM call | **unaffected** — still that model's per-call average |
+| LLM calls per task | **inflated** — the "task" is no longer a single agent loop |
+| skill-overhead ratios | **invalid** — compares two different amounts of work |
+
+Measured impact, comparing affected repetitions against others in the same cell:
+
+| Cell | with downstream work | without |
+|---|---|---|
+| `pptx-body-left-aligned` ON | 26 calls / 1,255,632 tok | 10 calls / 458,514 tok |
+| `pptx-size-contrast` ON | 36 calls / 1,908,134 tok | 10 calls / 491,474 tok |
+| `select-deck` SELECT | 46 calls / 2,485,834 tok | 7 calls / 302,900 tok |
+
+That is **2.7×–8.2×**, which is why these repetitions must be flagged rather than averaged in.
+
+**This detector was broken until 2026-09-09.** It matched a tool named `Task`, but this Claude
+Code build names the subagent tool `Agent`, so five affected repetitions were reported as
+clean. Now matches both, plus `TaskOutput`/`TaskStop` for background work, and is unit-tested.
+One published figure was wrong as a result: `pptx` skill overhead was stated as 18×, from a
+median including two contaminated repetitions; excluding them it is **3.0×**.
+
+**The cost profile in §7.1–7.4 is unaffected** — none of the 5 affected repetitions fall in
+its 20 cells. All were in the retired `pptx` tasks and one `select` task.
+
+### 7.6 Skill overhead is a property of skill × model
 
 Skill-on ÷ skill-off, in **both** measures — they differ, because the input/output/cache mix
 shifts between arms even at a fixed unit price:
@@ -362,7 +399,7 @@ already works ~2× the calls **without** the skill (10 vs 8 on `xlsx-fin-colors`
 guidance replaces exploration rather than adding to it — which is why its token ratio can dip
 below 1.0 at all.
 
-### 7.6 Skill selection works
+### 7.7 Skill selection works
 
 All candidate skills present (`xlsx`/`docx`/`pptx`/`pdf`), prompt names none, verdict from
 the transcript. `sonnet-4-6`, n=3: **12/12 correct, 0 confounded** — including a prompt that

@@ -52,6 +52,12 @@ CORTEX_PROXY = "http://127.0.0.1:47600"
 CORTEX_CA = os.path.expanduser("~/.cortex/ca/ca.crt")
 TARGET_HOST = (os.environ.get("ANTHROPIC_BASE_URL", "")
                .replace("https://", "").replace("http://", "").rstrip("/"))
+# Tool names that indicate work happening OUTSIDE the single agent loop we mean to
+# measure. Cortex counts such calls (they are real, billable, and traverse the same proxy
+# because the child's HTTPS_PROXY is inherited by subprocesses) but cannot attribute them,
+# so the TASK is no longer the unit it appears to be. Measured impact: 2.7-8.2x the tokens.
+SUBAGENT_TOOLS = ("Agent", "Task")
+BACKGROUND_TOOLS = ("TaskOutput", "TaskStop")
 ALLOWED_TOOLS = "Read Edit Write Bash(python*) Bash(pytest*)"
 # Pin the model explicitly. Inheriting it is not safe: the model actually used came from
 # ANTHROPIC_MODEL in the ambient environment, which differed from settings.json, so
@@ -275,7 +281,7 @@ def analyse_transcript(stdout):
     comes from here. Flag the task confounded if the invoked set exceeds expectations --
     the same 'test for the impossible combination' discipline used elsewhere."""
     tools, skills, subagents, turns, result = [], [], [], 0, None
-    skill_names = []
+    skill_names, background = [], []
     for line in stdout.splitlines():
         s = line.strip()
         if not s.startswith("{"):
@@ -300,13 +306,21 @@ def analyse_transcript(stdout):
                           or inp.get("name") or "")
                     skill_names.append(str(nm).lstrip("/").split()[0] if nm else "?")
                     skills.append(json.dumps(inp)[:120])
-                elif name == "Task":
-                    subagents.append(((c.get("input") or {}).get("subagent_type")
-                                      or "unknown"))
+                elif name in SUBAGENT_TOOLS:
+                    # Claude Code's subagent tool is `Agent` on this build (`Task` on
+                    # others). Matching only "Task" made this detector silently blind:
+                    # five runs spawned subagents and none were flagged.
+                    subagents.append((c.get("input") or {}).get("subagent_type")
+                                     or name)
+                elif name in BACKGROUND_TOOLS:
+                    # Not a subagent spawn, but evidence of async work whose LLM calls
+                    # land in our window without belonging to the main loop.
+                    background.append(name)
         elif t == "result":
             result = ev
     return {"tools": tools, "skills": skills, "skill_names": skill_names,
-            "subagents": subagents, "assistant_turns": turns, "result": result}
+            "subagents": subagents, "background": background,
+            "assistant_turns": turns, "result": result}
 
 
 # ---------------------------------------------------------------- one repetition
@@ -452,6 +466,8 @@ def run_rep(task, rep, cfg_dir, model=DEFAULT_MODEL, arm="on", timeout=1800):
             confounds.append(f"foreign_skill_invoked:{foreign}")
     if tr["subagents"]:
         confounds.append(f"subagent_invoked:{tr['subagents']}")
+    if tr.get("background"):
+        confounds.append(f"background_task_used:{sorted(set(tr['background']))}")
     if task.get("skill_marker") and not selection:
         if arm == "on" and skill_on_wire is False:
             confounds.append("expected_skill_not_on_wire")
@@ -487,6 +503,7 @@ def run_rep(task, rep, cfg_dir, model=DEFAULT_MODEL, arm="on", timeout=1800):
         "tool_calls": len(tr["tools"]),
         "tool_histogram": {t: tr["tools"].count(t) for t in sorted(set(tr["tools"]))},
         "skills_invoked": tr["skills"], "subagents_invoked": tr["subagents"],
+        "background_tools": tr.get("background") or [],
         "arm": arm, "allowed_tools": tools, "mode": task.get("mode"),
         "skills_fired": fired, "selection_correct": selection_correct,
         "expected_selection": task.get("expected_skill"),
