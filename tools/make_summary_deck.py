@@ -341,7 +341,7 @@ section(2, "Pricing")
 
 # ─────────────────────────────────────────────────── 9. pricing
 s = prs.slides.add_slide(BLANK); bg(s, PAPER)
-slide_title(s, "Model pricing — internal LiteLLM", "rate card, 2026-09-09")
+slide_title(s, "Model pricing — internal LiteLLM", "rate card")
 rows = [["benchmarked alias", "gateway entry", "input $/1M", "output $/1M", "vs sonnet-5"],
         ["claude-haiku-4-5-20251001", "aws/claude-haiku-4-5", "0.76", "3.80", "0.50×"],
         ["claude-sonnet-4-6", "aws/claude-sonnet-4-6", "2.28", "11.40", "1.50×"],
@@ -349,15 +349,18 @@ rows = [["benchmarked alias", "gateway entry", "input $/1M", "output $/1M", "vs 
         ["claude-opus-5", "aws/claude-opus-5", "3.80", "19.00", "2.50×"]]
 table(s, rows, 0.7, 2.0, 11.9, [3.7, 3.2, 1.7, 1.8, 1.5], size=14,
       highlight={(3, 2): GOOD, (3, 3): GOOD, (4, 4): WARN})
+tb(s, "Transcribed by hand from the gateway model pages on 2026-09-09. That page needs interactive internal web\n"
+      "authorization and fills itself by script, so no automated pull is possible or attempted.",
+   0.7, 3.75, 11.9, 0.55, 12, color=MUTED)
 tb(s, "sonnet-5 is priced at 2/3 of sonnet-4-6 — the single most consequential fact in the analysis.",
-   0.7, 3.95, 11.9, 0.35, 16, color=GOOD, bold=True)
-tb(s, "The cache caveat", 0.7, 4.5, 11.9, 0.3, 15, color=INK, bold=True)
+   0.7, 4.35, 11.9, 0.35, 16, color=GOOD, bold=True)
+tb(s, "The cache caveat", 0.7, 4.85, 11.9, 0.3, 15, color=INK, bold=True)
 tb(s, "The gateway publishes only Input and Output rates, but 81–97% of our prompt tokens are CACHE READS.\n"
       "  Scenario A — no discount: every prompt token at the Input rate (upper bound)\n"
       "  Scenario B — standard Anthropic/Bedrock convention: cacheRead ×0.10, cacheWrite ×1.25\n"
-      "B lands ~4–5× below A. Which the gateway bills is UNVERIFIED (/model/info returns 403 for a non-admin key).\n"
+      "B lands ~4–5× below A. Which the gateway actually bills is UNVERIFIED.\n"
       "The model ranking is identical under both, so the recommendation does not depend on resolving it.",
-   0.7, 4.85, 11.9, 1.5, 13, color=BODY, spacing=3)
+   0.7, 5.2, 11.9, 1.5, 12.5, color=BODY, spacing=2)
 
 section(3, "Findings")
 

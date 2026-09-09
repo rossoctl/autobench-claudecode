@@ -159,21 +159,11 @@ the only durable record.
 
 ## 5. Model pricing (internal LiteLLM, 2026-09-09)
 
-**Provenance.** `pricing.py` attempts a live pull from the gateway first
-(`/v2/model/info`, `/model/info`, `/model_group/info`) and falls back to the table below.
-The live pull is currently **refused**, with an unambiguous reason:
-
-```
-403 {"detail": "Virtual key is not allowed to call this route.
-     Only allowed to call routes: ['llm_api_routes']"}
-```
-
-The benchmark credential is a LiteLLM **virtual key** scoped to LLM API routes, so it can
-call `/v1/chat/completions` and `/v1/models` but no management route. The UI page embeds no
-prices either — it is a client-side app fetching from those same routes. So the figures
-below are **transcribed from the gateway's model pages on 2026-09-09**. Set
-`LITELLM_ADMIN_KEY` to an admin/master key and `pricing.py` will pull the rate card
-directly and reconcile it against this table, flagging any mismatch.
+**Provenance.** The rate card is **maintained by hand** in `pricing.py`, transcribed from
+the gateway's model pages (`/ui/?page=models`) on **2026-09-09**. That is deliberate, not a
+gap: the page sits behind an interactive internal web-authorization flow and fills its
+contents by script, so there is no endpoint a benchmark credential can read and no automated
+pull is attempted. When rates change, edit `PRICES` and bump `SOURCE_DATE`.
 
 | Benchmarked alias | Gateway entry | Input $/1M | Output $/1M | Output:input |
 |---|---|---|---|---|

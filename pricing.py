@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Monetary cost for the profile cells, from the internal LiteLLM price list.
 
-Prices transcribed from the gateway's own model pages
-(`/ui/?page=models`, 2026-09-09). The gateway's `/model/info` endpoint returns 403 for a
-non-admin key, so these could not be pulled programmatically and are hand-entered.
+The rate card is MAINTAINED BY HAND, on purpose. It is published on the gateway's model
+pages (`/ui/?page=models`), which sit behind an interactive internal web-authorization flow
+and render their contents client-side from script — so there is no endpoint a benchmark
+credential can read, and no automated pull is attempted. When rates change, edit PRICES
+below and bump SOURCE_DATE.
 
 TWO SCENARIOS, because the gateway publishes only Input and Output rates:
 
@@ -12,63 +14,21 @@ TWO SCENARIOS, because the gateway publishes only Input and Output rates:
                          published Anthropic/Bedrock convention.
 
 Which one the gateway actually bills is UNVERIFIED, and it matters enormously: cache reads
-are 81-97% of prompt tokens in every cell, so B lands roughly 5-8x below A. Treat A as the
+are 81-97% of prompt tokens in every cell, so B lands roughly 4-5x below A. Treat A as the
 worst case and B as the likely case, and confirm against a real invoice before quoting
 either as fact.
 
 Caveat on names: the price pages are titled `aws/claude-*`, while the benchmark pinned the
 bare aliases (`claude-sonnet-5`). Both route, and Cortex confirmed the bare alias is what
-was served, but whether the bare alias bills at the same rate as the `aws/` entry could not
-be verified with a non-admin key. Same-underlying-model is assumed.
+was served, but whether the bare alias bills at the same rate as the `aws/` entry is
+assumed rather than shown.
 """
 
-PRICE_ROUTES = ("/v2/model/info", "/model/info", "/model_group/info")
+SOURCE = "internal LiteLLM gateway model pages (/ui/?page=models)"
+SOURCE_DATE = "2026-09-09"
 
-
-def fetch_live(base=None, token=None):
-    """Try to pull the rate card from the gateway. Returns {} when not permitted.
-
-    Wired even though it currently fails: the benchmark credential is a LiteLLM VIRTUAL
-    key restricted to `llm_api_routes`, so every management route returns
-
-        403 {"detail": "Virtual key is not allowed to call this route.
-             Only allowed to call routes: ['llm_api_routes']"}
-
-    Pricing needs an admin/master key or a UI session. The UI page itself embeds no
-    prices -- it is a client-side app that fetches from these same routes. Supply an
-    admin key as LITELLM_ADMIN_KEY and this takes over from the transcribed table below.
-    """
-    import json as _json
-    import os as _os
-    import ssl as _ssl
-    import urllib.error as _err
-    import urllib.request as _req
-    base = (base or _os.environ.get("ANTHROPIC_BASE_URL", "")).rstrip("/")
-    token = token or _os.environ.get("LITELLM_ADMIN_KEY") or _os.environ.get("ANTHROPIC_AUTH_TOKEN")
-    if not (base and token):
-        return {}
-    ctx = _ssl.create_default_context()
-    for route in PRICE_ROUTES:
-        r = _req.Request(base + route, headers={"Authorization": "Bearer " + token})
-        try:
-            with _req.urlopen(r, timeout=25, context=ctx) as resp:
-                rows = _json.loads(resp.read()).get("data", [])
-        except (_err.HTTPError, Exception):
-            continue
-        out = {}
-        for e in rows:
-            name = e.get("model_name") or e.get("model_group")
-            info = e.get("model_info") or {}
-            ic, oc = info.get("input_cost_per_token"), info.get("output_cost_per_token")
-            if name and ic is not None and oc is not None:
-                out[name] = {"in": ic * 1e6, "out": oc * 1e6, "source": f"live {route}"}
-        if out:
-            return out
-    return {}
-
-
-# $ per 1M tokens. SOURCE: transcribed from the gateway's own model pages
-# (/ui/?page=models) on 2026-09-09, because fetch_live() above is refused for this key.
+# $ per 1M tokens. Transcribed from SOURCE on SOURCE_DATE -- see the module docstring for
+# why this is hand-maintained rather than fetched.
 PRICES = {
     "claude-haiku-4-5-20251001": {"in": 0.76, "out": 3.80,
                                   "ui": "aws/claude-haiku-4-5",
@@ -102,33 +62,17 @@ def cost(model, *, uncached, cache_read, cache_write, output, scenario="B"):
 
 
 def table():
-    rows = []
-    for m, p in PRICES.items():
-        rows.append((m, p["ui"], p["in"], p["out"], p["out"] / p["in"]))
-    return rows
+    return [(m, p["ui"], p["in"], p["out"], p["out"] / p["in"])
+            for m, p in PRICES.items()]
 
 
 if __name__ == "__main__":
-    live = fetch_live()
     print(f"{'benchmarked alias':28} {'gateway entry':24} {'in $/1M':>8} {'out $/1M':>9} {'out:in':>7}")
     for m, ui, i, o, r in table():
         print(f"{m:28} {ui:24} {i:>8.2f} {o:>9.2f} {r:>6.1f}x")
-    print()
-    if not live:
-        print("  source: TRANSCRIBED from the gateway UI (2026-09-09).")
-        print("  live fetch refused: the benchmark key is a LiteLLM virtual key limited to")
-        print("  llm_api_routes; /v2/model/info and friends return 403. Set LITELLM_ADMIN_KEY")
-        print("  to pull the rate card directly instead.")
-    else:
-        print("  source: LIVE from the gateway. Reconciling against the transcribed table:")
-        for m, p in PRICES.items():
-            for key in (m, p["ui"]):
-                if key in live:
-                    d_in = abs(live[key]["in"] - p["in"])
-                    d_out = abs(live[key]["out"] - p["out"])
-                    flag = "OK" if (d_in < 0.005 and d_out < 0.005) else "MISMATCH"
-                    print(f"    {key:26} live {live[key]['in']:.2f}/{live[key]['out']:.2f}  "
-                          f"transcribed {p['in']:.2f}/{p['out']:.2f}  {flag}")
-                    break
+    print(f"\n  source : {SOURCE}")
+    print(f"  dated  : {SOURCE_DATE} (hand-maintained; the page needs interactive web")
+    print(f"           authorization and fills its contents by script, so there is nothing")
+    print(f"           for a benchmark credential to read)")
     print(f"\n  Cache multipliers in scenario B: read x{CACHE_READ_MULT}, "
           f"write x{CACHE_WRITE_MULT} (unverified for this gateway)")

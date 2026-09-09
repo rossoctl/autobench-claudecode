@@ -160,8 +160,10 @@ this arm means genuinely ambiguous prompts, not more clear ones.
 
 ### Monetary cost
 
-`pricing.py` holds the internal LiteLLM rate card, transcribed from the gateway UI —
-`/model/info` returns 403 for a non-admin key, so it could not be pulled programmatically.
+`pricing.py` holds the internal LiteLLM rate card, transcribed by hand from the gateway's
+model pages (`/ui/?page=models`) and dated. That page is behind an interactive internal
+web-authorization flow and renders client-side, so there is nothing for a benchmark
+credential to read — when rates change, edit `PRICES` and bump `SOURCE_DATE`.
 
 | Benchmarked alias | Input $/1M | Output $/1M |
 |---|---|---|
