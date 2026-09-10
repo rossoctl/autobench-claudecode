@@ -23,15 +23,26 @@ So results/profile-manifest.json lists the exact files, their row counts and the
 `--report` reads it and shouts if a file went missing or changed underneath. Adding reps is
 now a deliberate act (`--freeze` again), not a side effect of running anything else.
 
-THE GRID IS FLAT n=5, deliberately. Pooling by (task, arm, model) also swept in the earlier
-same-day development sweeps -- 1-rep and 3-rep runs against sonnet-4-6 and sonnet-5, the two
-models the harness was built against -- so those two models sat at n=7-11 while haiku and
-opus sat at n=5. That is an uneven grid dressed up as one number, and it cost nothing to fix:
-the 33 sweep reps are excluded (with a reason, in the manifest), leaving exactly 5 reps per
-cell from the single grid run, 20 cells, 100 reps. Excluding them TIGHTENED the tok/LLMcall
-spreads (sonnet-5 0.11 -> 0.05, opus-5 0.08 -> 0.05) and moved no pass rate, so the flat grid
-is also the cleaner measurement. The excluded reps are real and stay on disk; raising n above
-5 means new invocations, which is a spending decision, not a filter change.
+THE GRID IS 18 CELLS AT n=5 PLUS TWO AT n~30, deliberately uneven. Read the n column.
+
+First it was accidentally uneven: pooling by (task, arm, model) swept in the earlier same-day
+development sweeps -- 1-rep and 3-rep runs against sonnet-4-6 and sonnet-5, the two models the
+harness was built against -- so those two sat at n=7-11 while haiku and opus sat at 5. That is
+an uneven grid dressed up as one number, and it cost nothing to fix: the 33 sweep reps are
+excluded (with a reason, in the manifest). Excluding them TIGHTENED the tok/LLMcall spreads
+(sonnet-5 0.11 -> 0.05, opus-5 0.08 -> 0.05) and moved no pass rate.
+
+Then it was deliberately made uneven, on 2026-09-09, by buying 50 new reps in the only two
+cells whose pass rate is not saturated -- haiku ON xlsx-fin-font-clean and opus-5 OFF
+xlsx-fin-colors. Everything else is 0.00 or 1.00, where more reps buy nothing. Both moved,
+and in the same direction: 0.40 -> 0.52 and 0.20 -> 0.37, with the Wilson 95% interval
+narrowing from width 0.65 to 0.34 and from 0.59 to 0.33. So the n=5 readings were not merely
+imprecise, they were PESSIMISTIC in both cells.
+
+Uniform n was considered and rejected: +5 reps everywhere costs ~$14 and ~84 min to add
+precision to 18 cells that are pinned at 0 or 1, and would not have settled the one genuinely
+contested comparison anyway (sonnet-5 vs sonnet-4-6 on xlsx-fin-colors ON differs by 0.25
+standard errors; separating it needs ~617 reps per cell). Spend reps where a number can move.
 
 Reported per cell and then across models:
   * tok/LLMcall        tokens per LLM CALL (one /v1/chat/completions) -- a MODEL constant.
@@ -177,7 +188,9 @@ def freeze(exclude=None, exclude_reps=None, keep_prior=True):
     MANIFEST.write_text(json.dumps(
         {"note": "Exact inputs to the xlsx cost profile. --report reads only these. "
                  "Regenerate with `profile.py --freeze` after a deliberate --run. "
-                 "The published grid is flat n=5: 20 cells x 5 reps from one grid run. "
+                 "The published grid is DELIBERATELY UNEVEN: 18 cells at n=5 from one grid "
+                 "run, plus the two non-saturated discriminator cells raised to n~30 on "
+                 "2026-09-09. Read the n column; do not quote a single n. "
                  "`excluded` files and `excluded_reps` (keyed basename#rep) are real "
                  "measurements still on disk, left out on purpose -- each with its reason.",
          "excluded": {b: exclude[b] for b in sorted(skipped)},
@@ -291,16 +304,27 @@ def report(reps, use_manifest=True):
         print("\n!! MEMBERSHIP PROBLEM -- numbers below may not match the published run:")
         for p in problems:
             print(f"   {p}")
+    # The two discriminator rates are COMPUTED, not typed. They were hardcoded as 0.40 and
+    # 0.20; raising those two cells to n~30 moved them to 0.52 and 0.37 and the narrative
+    # silently kept asserting the old pair. A number quoted in prose beside the table that
+    # produced it should be read from the same data.
+    def rate(task, arm, model):
+        rs = [r for r in by.get((task, arm, model), []) if not r["confounded"]]
+        return (sum(1 for r in rs if r["passed"]) / len(rs), len(rs)) if rs else (float("nan"), 0)
+    h_rate, h_n = rate("xlsx-fin-font-clean", "on", "claude-haiku-4-5-20251001")
+    o_rate, o_n = rate("xlsx-fin-colors", "off", "claude-opus-5")
     print("\nI predicted pass rate would be saturated -- OFF pinned at 0 by the pre-screen,")
     print("ON at 100 because the skill states the answer -- and therefore useless for")
     print("ranking models. THE DATA REFUTES THAT. Saturation only held for the two")
     print("mid-tier models it was observed on. Resolution exists at BOTH ends:")
-    print("  * haiku-4-5 ON xlsx-fin-font-clean = 0.40 -- it does not reliably comply")
-    print("    even when the skill states the rule.")
-    print("  * opus-5 OFF xlsx-fin-colors = 0.20 -- it sometimes knows the convention")
-    print("    with no skill at all.")
+    print(f"  * haiku-4-5 ON xlsx-fin-font-clean = {h_rate:.2f} (n={h_n}) -- it does not")
+    print("    reliably comply even when the skill states the rule.")
+    print(f"  * opus-5 OFF xlsx-fin-colors = {o_rate:.2f} (n={o_n}) -- it sometimes knows the")
+    print("    convention with no skill at all.")
     print("So these tasks DO rank models, below and above the sonnet band. Read pass rate")
-    print("as a real measurement, not as a formality.\n")
+    print("as a real measurement, not as a formality.")
+    print("These are the two cells raised to n~30, because they are the only two that")
+    print("discriminate; the other 18 sit at n=5. Read the n column.\n")
 
     cells = {}
     for task, arm in CELLS:

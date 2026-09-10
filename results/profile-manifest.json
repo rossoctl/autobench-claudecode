@@ -1,5 +1,5 @@
 {
-  "note": "Exact inputs to the xlsx cost profile. --report reads only these. Regenerate with `profile.py --freeze` after a deliberate --run. The published grid is flat n=5: 20 cells x 5 reps from one grid run. `excluded` files and `excluded_reps` (keyed basename#rep) are real measurements still on disk, left out on purpose -- each with its reason.",
+  "note": "Exact inputs to the xlsx cost profile. --report reads only these. Regenerate with `profile.py --freeze` after a deliberate --run. The published grid is DELIBERATELY UNEVEN: 18 cells at n=5 from one grid run, plus the two non-saturated discriminator cells raised to n~30 on 2026-09-09. Read the n column; do not quote a single n. `excluded` files and `excluded_reps` (keyed basename#rep) are real measurements still on disk, left out on purpose -- each with its reason.",
   "excluded": {
     "cortex-pyfix-001-20260908153958.ndjson": "pre-grid development sweep (1-3 reps, sonnet only) -- pooling it made the grid uneven at n=7-11 on the two sonnets while haiku/opus stayed at 5",
     "cortex-pyfix-001-on-20260908160004.ndjson": "pre-grid development sweep (1-3 reps, sonnet only) -- pooling it made the grid uneven at n=7-11 on the two sonnets while haiku/opus stayed at 5",
@@ -171,6 +171,16 @@
       "sha256": "51794c1b9bde02bd2b3e34f86dd589856c6ea43fd117a0a1644171e3bd1dc966"
     },
     {
+      "file": "out/runs/xlsx-fin-colors-off-claude-opus-5-20260909191920.ndjson",
+      "rows": 1,
+      "sha256": "4400fb2ca25cb4d4482866f20db1ccbd843af9818900e62f68bbd7b3456a79e5"
+    },
+    {
+      "file": "out/runs/xlsx-fin-colors-off-claude-opus-5-20260909192249.ndjson",
+      "rows": 24,
+      "sha256": "96c0bc3a3e449664a212470f69d00c2e2d72f40a09cc42450b95978a83c2fb08"
+    },
+    {
       "file": "out/runs/xlsx-fin-colors-off-claude-sonnet-4-6-20260908213724.ndjson",
       "rows": 5,
       "sha256": "452ffb51e1b4873cea6f23f5639b8e1acdd9444e6fbce43abf8d6f8714f47f64"
@@ -224,6 +234,16 @@
       "file": "out/runs/xlsx-fin-font-clean-on-claude-haiku-4-5-20251001-20260908212324.ndjson",
       "rows": 5,
       "sha256": "ca8907c30d2d7d2fe9f5f38e961555d32a496d68b9411077167093129070080a"
+    },
+    {
+      "file": "out/runs/xlsx-fin-font-clean-on-claude-haiku-4-5-20251001-20260909184648.ndjson",
+      "rows": 1,
+      "sha256": "21f82aa09fb4b0532073e086e3fd856f8da8a558d6497cafe78992abe74e362d"
+    },
+    {
+      "file": "out/runs/xlsx-fin-font-clean-on-claude-haiku-4-5-20251001-20260909184741.ndjson",
+      "rows": 24,
+      "sha256": "0e81f44799115725f41c72c36d8ec245101d86fa424c5d72a95afc1eab663c2e"
     },
     {
       "file": "out/runs/xlsx-fin-font-clean-on-claude-opus-5-20260908223705.ndjson",

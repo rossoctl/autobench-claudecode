@@ -1,7 +1,8 @@
 # AutoBench for Claude Code — Evaluation
 
 **Date:** 2026-09-09 · **Subject under test:** Claude Code (`claude` CLI 2.1.257)
-**Gateway:** internal ETE LiteLLM · **Repetitions recorded:** 194 (100 in the n=5 cost grid) ·
+**Gateway:** internal ETE LiteLLM · **Repetitions recorded:** 209 (149 in the cost grid: 18 cells
+at n=5, 2 discriminator cells at n≈30) ·
 **Skill measured:** `xlsx`
 
 ---
@@ -17,7 +18,7 @@ result against the internal LiteLLM rate card.
 | Use | Model | Why |
 |---|---|---|
 | Default for skill-driven document work | **`claude-sonnet-5`** | 100% pass on every task, and more **cost-efficient** than `sonnet-4-6` in all 3 cells (scenario B) despite being *less* token-efficient |
-| Cost-sensitive, tolerant of retries | **`claude-haiku-4-5`** | Most **cost-efficient** in every cell, by 1.2–4.2× over the next cheapest, but only **40%** pass on the harder task |
+| Cost-sensitive, tolerant of retries | **`claude-haiku-4-5`** | Most **cost-efficient** in every cell, by 1.5–4.2× over the next cheapest, but only **52%** pass on the harder task (n=29) |
 | Not indicated by this evidence | `claude-opus-5` | Least **cost-efficient** in every cell — though the *most token-efficient*, so it may suit token-bound rather than bill-bound work |
 
 Three findings that a simpler measurement would have got wrong:
@@ -29,8 +30,8 @@ Three findings that a simpler measurement would have got wrong:
 2. **`sonnet-5` looks worse in tokens and better in dollars.** It used 2.2× `sonnet-4-6`'s
    tokens on one task, but at 2/3 the unit price it still wins overall.
 3. **Raw cost hides reliability.** `haiku` has the lowest token count on
-   `xlsx-fin-font-clean` but passes only 40% of the time; charging it for its failures still
-   leaves it cheapest, which is a genuine finding rather than an artefact.
+   `xlsx-fin-font-clean` but passes only 52% of the time (n=29); charging it for its failures
+   still leaves it cheapest, which is a genuine finding rather than an artefact.
 
 ---
 
@@ -68,7 +69,7 @@ These were conflated early in the work and are kept strictly separate.
 | **Task** | One unit of work: `prompt.md` + a fresh `workspace/`, optionally a hidden `verdict/`. |
 | **Verdict** | The programmatic pass test. A command's exit code — never a model's opinion. |
 | **Arm** | A condition applied to a task. `off` = skill unavailable (control), `on` = skill available and explicitly invoked, `select` = all skills available, none named. |
-| **Cell** | One (task × arm × model) combination, measured over *n* repetitions. `xlsx-fin-colors` / `on` / `sonnet-5` is one cell (n=5). The profile has 5 (task, arm) pairs × 4 models = **20 cells**, 100 repetitions. |
+| **Cell** | One (task × arm × model) combination, measured over *n* repetitions. `xlsx-fin-colors` / `on` / `sonnet-5` is one cell (n=5). The profile has 5 (task, arm) pairs × 4 models = **20 cells**, 149 repetitions — 18 cells at n=5 and the 2 pass-rate discriminators at n≈30. The grid is deliberately uneven; read the *n* column, never a single *n*. |
 | **Repetition** (= one task run) | One headless `claude -p` invocation in a fresh workspace. |
 | **LLM call** | One `/v1/chat/completions` request/response on the wire. **A single task makes several** — 2 to 29 in these runs — each re-sending the growing conversation. |
 | **Compliance task** | Asks for ordinary work; the hidden verdict checks whether a *skill convention* was followed. |
@@ -261,10 +262,17 @@ two mid-tier models it was observed on.** Widening the tiers broke it in both di
 
 | Model | `xlsx-fin-colors` OFF → ON | `xlsx-fin-font-clean` OFF → ON |
 |---|---|---|
-| `haiku-4-5` | 0.00 → 1.00 | 0.00 → **0.40** ← does not reliably comply *even when told* |
+| `haiku-4-5` | 0.00 → 1.00 | 0.00 → **0.52** (n=29) ← does not reliably comply *even when told* |
 | `sonnet-4-6` | 0.00 → 1.00 | 0.00 → 1.00 |
 | `sonnet-5` | 0.00 → 1.00 | 0.00 → 1.00 |
-| `opus-5` | **0.20** → 1.00 ← sometimes knows the convention unaided | 0.00 → 1.00 |
+| `opus-5` | **0.37** (n=30) → 1.00 ← sometimes knows the convention unaided | 0.00 → 1.00 |
+
+Every cell above is n=5 except the two bolded ones, which are the only two rates in the whole
+profile that are neither 0 nor 1 — so they are the only two where sampling error could change a
+conclusion, and the only two taken to n≈30. Both *rose* when the sample grew (0.40→0.52 and
+0.20→0.37) and both 95% Wilson intervals halved (0.65→0.34 wide, 0.59→0.33 wide): the n=5
+readings were pessimistic, not wrong in direction. Neither interval reaches 0 or 1, so neither
+row's qualitative claim moves.
 
 **Generalisable lesson: "the measure is saturated" is a claim about the models you happened
 to test, not about the task.**
@@ -294,7 +302,7 @@ cells:
 
 | Model | Range | Spread | Reading |
 |---|---|---|---|
-| `haiku-4-5` | 0.97–1.04 | **0.07** | ≈ same context per LLM call |
+| `haiku-4-5` | 0.95–1.04 | **0.09** | ≈ same context per LLM call |
 | `sonnet-5` | 1.18–1.24 | **0.05** | **≈1.21× more** per LLM call |
 | `opus-5` | 0.88–0.93 | **0.05** | **≈0.90× — leaner** per LLM call |
 
@@ -312,18 +320,29 @@ Cost per **solved** task, scenario B (standard cache), `$` per task:
 | Task | `haiku-4-5` | `sonnet-4-6` | `sonnet-5` | `opus-5` |
 |---|---|---|---|---|
 | `xlsx-fin-colors` (ON) | **0.0386** | 0.1746 | 0.1608 | 0.2719 |
-| `xlsx-fin-font-clean` (ON) | **0.1075** ⚠️ | 0.1896 | 0.1261 | 0.2486 |
+| `xlsx-fin-font-clean` (ON) | **0.0822** ⚠️ | 0.1896 | 0.1261 | 0.2486 |
 | `cortex-pyfix-001` (no skill) | **0.0313** | 0.0839 | 0.0588 | 0.1030 |
 
-⚠️ haiku's figure already charges it for a 0.40 pass rate.
+⚠️ haiku's figure already charges it for a 0.52 pass rate (n=29) — it is a cost *per solved* task,
+so the ~48% of runs that have to be redone are already paid for. This is the one cost figure the
+n≈30 re-run moved: at n=5 it read 0.1075 on a 0.40 pass rate. The correction goes in haiku's
+favour (a better pass rate divides the same median cost by more), widening its margin over
+`sonnet-5` in this cell from 1.17× to 1.53× — still the narrowest of the three cells, and the ⚠️
+stands because that margin is small enough for the validator you need anyway to eat it.
 
 Scenario A (no cache discount) for the same cells:
 
 | Task | `haiku-4-5` | `sonnet-4-6` | `sonnet-5` | `opus-5` |
 |---|---|---|---|---|
 | `xlsx-fin-colors` | 0.1409 | 0.6677 | 0.8920 | 1.1625 |
-| `xlsx-fin-font-clean` | 0.3364 | 0.8484 | 0.6625 | 1.1259 |
+| `xlsx-fin-font-clean` | 0.3501 | 0.8484 | 0.6625 | 1.1259 |
 | `cortex-pyfix-001` | 0.1597 | 0.4582 | 0.3113 | 0.5649 |
+
+The haiku `xlsx-fin-font-clean` cell moved in **opposite directions** between the two scenarios on
+the n≈30 re-run (A 0.3364→0.3501, B 0.1075→0.0822). Two things changed at once: the pass rate rose
+(cheaper per solved task, in both scenarios) and the median cache-read volume rose (dearer). A
+charges cache reads at full rate, so there the volume increase wins; B discounts them 10×, so
+there the pass rate wins. The ranking is unaffected in both.
 
 **`haiku-4-5` is cheapest and `opus-5` dearest in every cell under both scenarios** — that much
 does not depend on the cache assumption. The middle of the field does: on `xlsx-fin-colors` the
@@ -435,18 +454,19 @@ shifts between arms even at a fixed unit price:
 
 | Task | Measure | `haiku-4-5` | `sonnet-4-6` | `sonnet-5` | `opus-5` |
 |---|---|---|---|---|---|
-| `xlsx-fin-colors` | tokens | 2.88× | 1.50× | 2.01× | **0.93×** |
-| `xlsx-fin-colors` | **dollars** | 1.97× | 1.33× | 1.88× | **1.06×** |
-| `xlsx-fin-font-clean` | tokens | 2.37× | 2.08× | 1.56× | **1.01×** |
-| `xlsx-fin-font-clean` | **dollars** | 2.24× | 1.71× | 1.41× | **1.08×** |
+| `xlsx-fin-colors` | tokens | 2.88× | 1.54× | 1.98× | **0.94×** |
+| `xlsx-fin-colors` | **dollars** | 1.97× | 1.44× | 1.80× | **1.04×** |
+| `xlsx-fin-font-clean` | tokens | 3.33× | 2.06× | 1.44× | **1.01×** |
+| `xlsx-fin-font-clean` | **dollars** | 2.21× | 1.69× | 1.32× | **1.08×** |
 
-In dollars the skill adds **6–8% on opus-5** and roughly **doubles the bill on haiku**. Note
+In dollars the skill adds **4–8% on opus-5** and roughly **doubles the bill on haiku**. Note
 opus-5's dollar overhead sits slightly *above* 1.0 even where its token overhead dips below —
 so "the skill is free on opus-5" is too strong; "barely noticeable" is accurate.
 
-"What does this skill cost" has no single answer. `opus-5` barely notices it because it
-already works ~2× the calls **without** the skill (10 vs 8 on `xlsx-fin-colors`), so the
-guidance replaces exploration rather than adding to it — which is why its token ratio can dip
+"What does this skill cost" has no single answer. `opus-5` barely notices it because it is the
+one model that makes **more** LLM calls without the skill than with it (10 OFF vs 8 ON on
+`xlsx-fin-colors`) — and twice as many OFF-arm calls as `sonnet-4-6` makes (10 vs 5). The
+guidance replaces exploration rather than adding to it, which is why its token ratio can dip
 below 1.0 at all.
 
 ### 7.7 Skill selection works
@@ -467,27 +487,37 @@ token-efficient*. Its 2/3 unit price more than absorbs the 1.21× per-call conte
 `xlsx-fin-colors` is the thin one and it does not survive scenario A (§7.3); the other two cells
 hold under both.
 
-**Use `claude-haiku-4-5` only behind a validator.** Most cost-efficient in every cell, by 1.2–4.2×
-over the next cheapest model — the narrow 1.2× is on `xlsx-fin-font-clean`, the cell where its 0.40
-pass rate is already being charged for — and fastest (14–39 s vs 59–78 s). But it passed the harder compliance task only **40%** of the
-time *with the skill supplied*. What it actually got wrong, across the three failures:
+**Use `claude-haiku-4-5` only behind a validator.** Most cost-efficient in every cell, by 1.5–4.2×
+over the next cheapest model — the narrow 1.5× is on `xlsx-fin-font-clean`, the cell where its 0.52
+pass rate is already being charged for — and fastest (14–39 s vs 59–78 s). But it passed the harder
+compliance task only **52%** of the time (n=29) *with the skill supplied*. This is the one cell
+taken to n≈30, so the failure modes are the best-characterised part of the profile. Re-running the
+verdict against all 14 retained failing workspaces gives the full taxonomy — 15 assertion failures,
+because one repetition failed two:
 
-| Rep | Failure | Detectable by eye? |
+| Failure | Count | Detectable without the skill's rules to hand? |
 |---|---|---|
-| 3 | mixed fonts — `['calibri', 'cambria']` | maybe, on close inspection |
-| 4 | mixed fonts — `['arial', 'calibri']` | maybe |
-| 5 | **hardcoded the values instead of using formulas** (0 formulas where ≥2 required) | **no — the numbers are correct** |
+| mixed fonts across cells — `['arial', 'calibri']` (7×), `['calibri', 'cambria']` (1×) | 8 | maybe, on close inspection |
+| wrong font — plain `calibri`, not on the approved list | 4 | **no** — needs the approved list |
+| **hardcoded values instead of formulas** (0 formulas where ≥2 required) | 3 | **no — the numbers are correct** |
 
-That third one is the reason "retries are acceptable" is too casual a condition. A hardcoded
-spreadsheet *looks* right and reports the right figures; it breaks silently the first time an
-input changes. So the precondition is not tolerance of retries but **the ability to detect the
-failure programmatically** — the same verdict the benchmark uses. Without a validator in the
-pipeline you do not get retries, you get silent defects. With one, haiku's economics survive
-its failures on these tasks (cost per *solved* task already charges for them); that will not
-hold as tasks harden.
+The shape of that distribution is the finding, not the pass rate. **Two thirds of the failures
+(7 of 15 in the second and third rows) are undetectable by inspection** — you cannot see that
+`calibri` is off-list without the list, and you certainly cannot see a hardcoded number. The
+hardcoded-formula mode is the worst of them: the spreadsheet *looks* right and reports the right
+figures, then breaks silently the first time an input changes. At n=5 it appeared once and could
+have been dismissed as a fluke; at n=29 it recurs 3 times (~10% of all runs), so it is a
+reproducible mode of this model on this task, not an outlier.
+
+So the precondition for using haiku here is not tolerance of retries but **the ability to detect
+the failure programmatically** — the same verdict the benchmark uses. Without a validator in the
+pipeline you do not get retries, you get silent defects, and 7 of 15 of them would survive review.
+With one, haiku's economics survive its failures on these tasks (cost per *solved* task already
+charges for them, and the n≈30 re-run improved that figure, not worsened it); that will not hold
+as tasks harden.
 
 **Do not default to `claude-opus-5` where the bill is the constraint.** Least cost-efficient
-in all three cells (1.6–2.1× `sonnet-5`) with no pass-rate advantage. But note the measure
+in all three cells (1.7–2.0× `sonnet-5`) with no pass-rate advantage. But note the measure
 matters: it is the **most token-efficient** model tested and the leanest per LLM call, and it was
 the only model to solve a task unaided. If the binding constraint is a context window, a rate
 limit or latency rather than the invoice, that verdict can reverse — which is precisely the
@@ -503,17 +533,31 @@ are not tight — see limitations.
 
 1. **One skill.** Every skill-specific conclusion rests on `xlsx`. Whether "the skill is free
    on opus-5" is an opus property or an xlsx property is currently indistinguishable.
-2. **n=5 per cell** — 20 cells, 100 repetitions, and some CVs up to 0.85, so individual cost
-   figures are indicative rather than tight. The tokens-per-LLM-call constants are trustworthy
+2. **A deliberately uneven grid: 18 cells at n=5, 2 at n≈30** — 149 repetitions, some CVs up to
+   0.85, so individual cost figures are indicative rather than tight. **Read the *n* column; do
+   not quote a single *n* for this profile.** The tokens-per-LLM-call constants are trustworthy
    because they reproduce across five structurally different cells; a single cell's median is
-   not. Raising *n* would need new invocations, which is a spending decision, not a filter
-   change. Note that this grid *was* briefly uneven: pooling by (task, arm, model) had swept in
-   the earlier same-day development sweeps, which existed only for `sonnet-4-6` and `sonnet-5`,
-   so those two models sat at n=7–11 while haiku and opus sat at 5 — an uneven grid reported as
-   a flat "n=5". The 33 sweep repetitions are now excluded by name, each with its reason, in
-   `results/profile-manifest.json`; they remain on disk. Excluding them tightened the
-   tokens-per-call spreads (`sonnet-5` 0.11→0.05, `opus-5` 0.08→0.05) and moved no pass rate,
-   so the flat grid is also the cleaner measurement.
+   not.
+
+   The unevenness is a spending choice, and the two cells chosen are the only two pass rates in
+   the profile that are neither 0 nor 1 — the only two where sampling error could change a
+   conclusion. Both moved when *n* grew (haiku `font-clean`/ON 0.40→0.52, opus `colors`/OFF
+   0.20→0.37) and both 95% Wilson intervals roughly halved (0.65→0.34, 0.59→0.33), so the n=5
+   readings were pessimistic rather than wrong. A **uniform** n=10 was considered and rejected:
+   ~$14 and ~84 minutes to halve nothing that matters, since 16 of the 20 cells are already
+   saturated at 0 or 1 and the one genuinely contested cost comparison (`sonnet-5` vs
+   `sonnet-4-6` on `xlsx-fin-colors`, a ~0.25-SE difference) would need ~617 repetitions per cell
+   at 80% power. Spending 50 repetitions on the two cells the headline claims rest on buys more
+   than spending 100 spread evenly.
+
+   Note also that this grid was *accidentally* uneven earlier, which is a different and worse
+   thing: pooling by (task, arm, model) had swept in the same-day development sweeps, which
+   existed only for `sonnet-4-6` and `sonnet-5`, so those two models sat at n=7–11 while haiku
+   and opus sat at 5 — an uneven grid reported as a flat "n=5". Those 33 repetitions are now
+   excluded by name, each with its reason, in `results/profile-manifest.json`; they remain on
+   disk. Excluding them tightened the tokens-per-call spreads (`sonnet-5` 0.11→0.05, `opus-5`
+   0.08→0.05) and moved no pass rate. The distinction that matters: unevenness is fine when it is
+   chosen and labelled, and a defect when it arrives through a glob.
 3. **Cache billing unverified** — the largest single uncertainty (4–5× on absolute cost). It does
    not change the conclusions that matter: `haiku-4-5` is cheapest and `opus-5` dearest in every
    cell under both scenarios, and the token/cost inversion holds either way. It *does* decide one
@@ -546,15 +590,21 @@ python3 profile.py --report               # recompile from the manifest, no invo
 python3 pricing.py                        # the rate card
 ```
 
-Raw per-repetition records are in the gitignored `out/runs/` and `out/runs-archive/` — 194
-repetitions across 58 files. Which of them belong to this profile is pinned in
-`results/profile-manifest.json` (44 files, 160 repetitions, with a sha256 each; of those, the
-20 grid files supply the 100 repetitions in §7's tables, and the rest are the phase 2–3 task
-records). The 14 excluded files are listed there by name with a reason each — 13 pre-grid
-development sweeps and one preflight canary. `--report` reads only the manifest and says so
+Raw per-repetition records are in the gitignored `out/runs/` and `out/runs-archive/` — 244
+repetitions across 62 files. Which of them belong to this profile is pinned in
+`results/profile-manifest.json` (48 files, 210 rows with a sha256 each, 209 counted; of those, 24
+grid files supply 150 grid repetitions — 149 after the confound filter — for §7's tables, and the
+rest are the phase 2–3 task records). Membership is excluded at two granularities: **14 files** by
+name (13 pre-grid development sweeps and one preflight canary) and **1 single repetition** keyed
+`basename#rep`. The per-rep granularity exists because the `select-deck` sonnet-4-6 file holds one
+contaminated repetition (46 LLM calls via a real subagent) beside two clean ones (7 calls each);
+excluding the whole file would have destroyed the very comparison that makes the contamination
+legible, and keying on `basename#rep` leaves the file's sha256 valid so integrity still covers the
+bytes actually read. A rep exclusion matching no row is reported as `STALE REP EXCLUSION` rather
+than silently doing nothing. `--report` reads only the manifest and says so
 loudly if a file went missing or changed. Membership used to be a glob of both directories,
 which meant any later harness invocation silently joined a published cell; a one-rep canary on
 2026-09-09 did exactly that and moved a median. `--report` also asserts two token identities per
 cell — `prompt == uncached + cacheRead + cacheWrite` and `total == prompt + completion` — and
-quarantines any cell that fails them. None did: 0 violations across all 194 recorded
+quarantines any cell that fails them. None did: 0 violations across all 209 counted
 repetitions, excluded ones included.

@@ -178,7 +178,8 @@ this arm means genuinely ambiguous prompts, not more clear ones.
 |---|---|
 | [`results/EVALUATION.md`](results/EVALUATION.md) | Full evaluation: terms, setup + rationale, pricing, methodology, all findings, model recommendation, limitations |
 | [`results/autobench-claudecode-summary.pptx`](results/autobench-claudecode-summary.pptx) | 19-slide summary of the same material, contents on slide 2 (regenerate: `tools/make_summary_deck.py`) |
-| [`results/xlsx-cost-profile-20260908.txt`](results/xlsx-cost-profile-20260908.txt) | Raw compiled profile output |
+| [`results/xlsx-cost-profile-20260909.txt`](results/xlsx-cost-profile-20260909.txt) | Raw compiled profile output — **current**. 18 cells at n=5, the 2 pass-rate discriminators at n≈30; read the `n` column |
+| [`results/xlsx-cost-profile-20260908.txt`](results/xlsx-cost-profile-20260908.txt) | The earlier flat-n=5 snapshot, kept for comparison. Reproducible only from the manifest as it stood at commit `f00124a` — `--report` today reads the current manifest and will not regenerate it |
 
 ### Monetary cost
 
@@ -215,8 +216,15 @@ python3 profile.py --run --reps 5      # the grid
 python3 profile.py --report            # recompile only
 ```
 
-Full output: [`results/xlsx-cost-profile-20260908.txt`](results/xlsx-cost-profile-20260908.txt)
+Full output: [`results/xlsx-cost-profile-20260909.txt`](results/xlsx-cost-profile-20260909.txt)
 — four models on the two `xlsx` discriminators plus the no-skill canary.
+
+**The grid is deliberately uneven, so read the `n` column.** 18 cells sit at n=5; the two cells
+whose pass rate is neither 0 nor 1 — `xlsx-fin-font-clean`/ON/`haiku` and
+`xlsx-fin-colors`/OFF/`opus-5` — were taken to n≈30, because they are the only two where sampling
+error could change a conclusion. Both rose (0.40→0.52, 0.20→0.37) and both 95% intervals roughly
+halved. A uniform n=10 was considered and rejected: it costs ~$14 to tighten 16 cells that are
+already saturated at 0 or 1.
 
 ### Pass rate ranks models — a prediction of mine that was wrong
 
@@ -226,27 +234,32 @@ it was observed on, and **broke as soon as the tiers widened**:
 
 | | OFF | ON |
 |---|---|---|
-| `haiku-4-5` | 0.00 | **0.40** ← does not reliably comply even when told |
+| `haiku-4-5` | 0.00 | **0.52** (n=29) ← does not reliably comply even when told |
 | `sonnet-4-6` | 0.00 | 1.00 |
 | `sonnet-5` | 0.00 | 1.00 |
-| `opus-5` | **0.20** ← sometimes knows the convention unaided | 1.00 |
+| `opus-5` | **0.37** (n=30) ← sometimes knows the convention unaided | 1.00 |
 
 (`xlsx-fin-font-clean` ON for haiku; `xlsx-fin-colors` OFF for opus-5.) So a compliance task
 does have resolution — just not between models that both sit above the ceiling.
 
+Those two bolded cells are the only rates in the profile that are neither 0 nor 1, so they are the
+only ones sampling error could overturn — which is why they, and only they, were taken to n≈30.
+Both rose (0.40→0.52, 0.20→0.37) and both 95% Wilson intervals roughly halved (to 0.34 and 0.33
+wide). Neither reaches 0 or 1, so both readings above stand; the n=5 versions were pessimistic.
+
 ### Tokens per LLM call is a model constant; calls per task is not
 
 `tokens per task = tokens per LLM CALL × LLM calls per task`. One task is one
-`claude -p` run and makes **several** LLM calls (5–24 observed), each re-sending the
+`claude -p` run and makes **several** LLM calls (2–29 observed), each re-sending the
 growing conversation — which is also why cache reads dominate.
 
 Ratio vs `sonnet-4-6`, across five structurally different cells:
 
 | model | spread across cells | reading |
 |---|---|---|
-| `haiku-4-5` | 0.97–1.05, **spread 0.07** | ≈ same context per LLM call |
-| `sonnet-5` | 1.19–1.30, **spread 0.11** | **≈1.23× more** per LLM call |
-| `opus-5` | 0.89–0.97, **spread 0.08** | **≈0.90× — leaner** per LLM call |
+| `haiku-4-5` | 0.95–1.04, **spread 0.09** | ≈ same context per LLM call |
+| `sonnet-5` | 1.18–1.24, **spread 0.05** | **≈1.21× more** per LLM call |
+| `opus-5` | 0.88–0.93, **spread 0.05** | **≈0.90× — leaner** per LLM call |
 
 Per-call context is stable enough to budget with. **Call count is not**: it swings 0.40–1.00×
 for haiku and 0.83–2.00× for opus-5 depending on the task. So decompose — the constant term
@@ -258,15 +271,15 @@ is the model, the variable term is the work.
 
 | task | haiku-4-5 | sonnet-4-6 | sonnet-5 | opus-5 |
 |---|---|---|---|---|
-| `xlsx-fin-colors` (ON) | **192,703** | 257,611 | 573,855 | 284,825 |
-| `xlsx-fin-font-clean` (ON) | 395,968 | 350,461 | 446,052 | **277,638** |
-| `cortex-pyfix-001` | 204,034 | 195,868 | 200,732 | **144,834** |
+| `xlsx-fin-colors` (ON) | **192,703** | 266,640 | 565,306 | 284,825 |
+| `xlsx-fin-font-clean` (ON) | 429,832 | 350,461 | 420,459 | **277,638** |
+| `cortex-pyfix-001` | 204,034 | 196,634 | 200,732 | **144,834** |
 
 `opus-5` is the **cheapest** on two of three and `sonnet-5` the dearest on two of three —
 bigger is not more expensive here. And haiku on `font-clean` shows why the denominator
-matters: its raw token count is the lowest of all four (158k), but at a 0.40 pass rate its
-cost per *solved* task is worse than sonnet-4-6's. Ranking on raw tokens would have picked
-exactly the wrong model.
+matters: its raw token count is the lowest of all four (222k vs 278k–420k), but at a 0.52 pass
+rate (n=29) its cost per *solved* task is the **worst** of the four. Ranking on raw tokens would
+have picked exactly the wrong model.
 
 ### The skill is nearly free on opus-5 and expensive on haiku
 
@@ -274,12 +287,13 @@ Skill-on ÷ skill-off tokens:
 
 | task | haiku-4-5 | sonnet-4-6 | sonnet-5 | opus-5 |
 |---|---|---|---|---|
-| `xlsx-fin-colors` | 2.88× | 1.50× | 2.01× | **0.93×** |
-| `xlsx-fin-font-clean` | 2.37× | 2.08× | 1.56× | **1.01×** |
+| `xlsx-fin-colors` | 2.88× | 1.54× | 1.98× | **0.94×** |
+| `xlsx-fin-font-clean` | 3.33× | 2.06× | 1.44× | **1.01×** |
 
 So "what does this skill cost" has no single answer — it is a property of skill × model.
-`opus-5` absorbs it for free, largely because it already works harder on the OFF arm (2.0×
-the calls), so the skill adds guidance rather than effort.
+`opus-5` absorbs it for free, largely because it already works harder on the OFF arm — twice as
+many calls there as `sonnet-4-6` makes, and more calls without the skill than with it (10 vs 8 on
+`xlsx-fin-colors`) — so the skill adds guidance rather than effort.
 
 Cache reads are 81–97% of prompt tokens across every model and cell, highest on `sonnet-5`
 and `opus-5` (95–97%).
