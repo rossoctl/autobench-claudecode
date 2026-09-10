@@ -2,7 +2,8 @@
 
 **Date:** 2026-09-09 · **Subject under test:** Claude Code (`claude` CLI 2.1.257)
 **Gateway:** internal ETE LiteLLM · **Repetitions recorded:** 209 (149 in the cost grid: 18 cells
-at n=5, 2 discriminator cells at n≈30) ·
+at n=5, 2 discriminator cells at n≈30), plus 6 in the cross-session stability probe of §7.3.2 that
+are deliberately kept out of the grid ·
 **Skill measured:** `xlsx`
 
 ---
@@ -17,7 +18,7 @@ result against the internal LiteLLM rate card.
 
 | Use | Model | Why |
 |---|---|---|
-| Default for skill-driven document work | **`claude-sonnet-5`** | 100% pass on every task, and never dearer than `sonnet-4-6` with evidence behind it — **decisively cheaper on 1 of 3 cells, near-decisively on a 2nd, a tie on the 3rd** (scenario B, §7.3.1) — despite being *less* token-efficient |
+| Default for skill-driven document work | **`claude-sonnet-5`** | 100% pass on every task, and never dearer than `sonnet-4-6` with evidence behind it — **decisively cheaper on 1 of 3 cells, unresolved on the other 2** (scenario B, §7.3.1–§7.3.2) — despite being *less* token-efficient |
 | Cost-sensitive, tolerant of retries | **`claude-haiku-4-5`** | Most **cost-efficient** in every cell, by 1.5–4.2× over the next cheapest, but only **52%** pass on the harder task (n=29) |
 | Not indicated by this evidence | `claude-opus-5` | Least **cost-efficient** in every cell — though the *most token-efficient*, so it may suit token-bound rather than bill-bound work |
 
@@ -373,15 +374,20 @@ The headline `sonnet-5` vs `sonnet-4-6` comparison, scenario B:
 | Cell | median saving | Cohen's *d* | exact *p* | reps/cell for 80% power | verdict |
 |---|---|---|---|---|---|
 | `cortex-pyfix-001` (canary) | 29.9% | 9.09 | **0.008** | already there at 5 | **established** |
-| `xlsx-fin-font-clean` (ON) | 33.5% | 1.42 | 0.056 | ~8 (have 5) | **3 more reps per cell would settle it** |
+| `xlsx-fin-font-clean` (ON) | 33.5% | 1.42 | 0.056 | ~8 (have 5) | **not established — and not fixable with reps, see §7.3.2** |
 | `xlsx-fin-colors` (ON) | 7.9% | 0.16 | 0.778 | **~617** | **a tie — no evidence either way** |
 
 So the honest statement is **not** "cheaper in all three cells". It is: decisively cheaper on the
-canary, near-decisively on `xlsx-fin-font-clean`, and *indistinguishable* on `xlsx-fin-colors`.
-The three cells look similar in the table and are epistemically miles apart — the colors gap is
-one quarter of a standard error, and settling it would take ~617 repetitions per cell (~$150 and
-most of a day) because `sonnet-5`'s cost CV in that cell is 0.42. That is the cell to stop
-quoting, not the cell to re-run.
+canary, unresolved on `xlsx-fin-font-clean`, and *indistinguishable* on `xlsx-fin-colors`. The
+three cells look similar in the table and are epistemically miles apart — the colors gap is one
+quarter of a standard error, and settling it would take ~617 repetitions per cell (~$150 and most
+of a day) because `sonnet-5`'s cost CV in that cell is 0.42. That is the cell to stop quoting, not
+the cell to re-run.
+
+The **reps/cell** column deserves a warning label. It inverts the standard power formula on the SD
+observed in *this* sample, which assumes the cell is stationary — that a repetition bought
+tomorrow is drawn from the same distribution as one bought today. For `xlsx-fin-font-clean` that
+assumption was put to the test and it failed; §7.3.2 is what happened.
 
 This also weakens the **swap** described above. Under scenario A the point estimates do reverse
 (`sonnet-4-6` 0.6677 < `sonnet-5` 0.8920), but that reversal is itself not established
@@ -403,15 +409,102 @@ Two further checks, so the fix does not leave a different overclaim standing:
 None of this changes the recommendation in §8 — `sonnet-5` is never dearer than `sonnet-4-6` with
 evidence behind it — but "all three cells" was doing work the data cannot support.
 
-Every figure in this section is recomputed from the frozen manifest by `tools/cost_significance.py`
-rather than retyped here. It prints two estimators side by side, because they are not
-interchangeable: the published dollar figures take the **median of each token column, then price**
-(the cell's typical token profile, priced), while any SD, Cohen's *d* or permutation test needs the
-cost of **each repetition, then statistics**. The median of a sum is not the sum of the medians, so
-these disagree — 33.5% versus 26.0% on `xlsx-fin-font-clean` from the very same data. The table
-above quotes the median-profile gap with the per-repetition *p*; that pairing is deliberate but
-worth stating, since quoting one estimator beside the other's *p*-value without saying so is how a
-table goes quietly wrong.
+Every figure in this section is recomputed from the frozen manifest by `tools/cost_significance.py`,
+which prints both estimators side by side (see §7.3.3) rather than having them retyped here.
+
+### 7.3.2 We bought the reps §7.3.1 prescribed, and they falsified the prescription
+
+The table above prescribed ~8 repetitions per cell to settle `xlsx-fin-font-clean`. We bought 3 more
+per sonnet on **2026-09-09, ~23 hours after the grid**, holding everything we control constant: same
+task directory, same ON arm, same skill files, same harness commit, same Cortex proxy, same model
+alias on the wire. Reproduce with `tools/stability_probe.py`.
+
+They did not settle it. Read as three views of one question (scenario B, `sonnet-5` vs `sonnet-4-6`,
+median-profile gap first, mean gap second — see §7.3.3):
+
+| Reading | n | `sonnet-4-6` | `sonnet-5` | gap (median profile) | gap (means) | exact *p* |
+|---|---|---|---|---|---|---|
+| 09-08 grid — **what is published** | 5 v 5 | 0.1873 | 0.1386 | 33.5% cheaper | 26.0% cheaper | 0.056 |
+| 09-09 probe alone | 3 v 3 | 0.1971 | 0.4759 | **118.7% dearer** | 141.4% dearer | 0.100 |
+| both sessions pooled | 8 v 8 | 0.1910 | 0.2651 | 6.2% cheaper | 38.8% dearer | 0.477 |
+
+(Costs are per-repetition means here, not the per-solved medians of §7.3, so they do not match that
+table cell-for-cell. Both arms pass 100% in this cell, so nothing is hidden in a pass-rate divisor.
+The 3 v 3 *p* of 0.100 **is that design's floor** — C(6,3) = 20 splits, so 2/20 is the smallest
+two-sided value it can produce, and hitting it means the six repetitions separate completely.)
+
+The sign reverses between sessions and the pooled reading is a tie. So the answer to "is `sonnet-5`
+cheaper here" is not "yes, marginally" and not "no" — it is that **the cell is not stationary**, and
+a *p*-value computed across two sessions of it is measuring drift rather than the models.
+
+**Which is drifting is the useful part, and there is a control for it.** Both sonnets were re-run in
+the same session pair, so `sonnet-4-6` is a control on the rig. Per model, 09-08 versus 09-09:
+
+| Measure | `sonnet-4-6` 09-08 → 09-09 | | `sonnet-5` 09-08 → 09-09 | |
+|---|---|---|---|---|
+| LLM calls | 8.8 → 8.7 | ×0.98, *p* = 1.000 | 9.6 → 32.3 | **×3.37, *p* = 0.018** |
+| tool calls | 7.8 → 7.7 | ×0.98, *p* = 1.000 | 8.6 → 31.3 | **×3.64, *p* = 0.018** |
+| total tokens | 334,843 → 325,112 | ×0.97, *p* = 0.875 | 457,120 → 1,876,787 | **×4.11, *p* = 0.018** |
+| wall seconds | 71.3 → 84.8 | ×1.19, *p* = 0.214 | 63.7 → 278.0 | **×4.37, *p* = 0.018** |
+| cost, scenario B | 0.1873 → 0.1971 | ×1.05, *p* = 0.750 | 0.1386 → 0.4759 | **×3.43, *p* = 0.018** |
+
+`sonnet-4-6` reproduced to within 3% on every token and call measure. `sonnet-5` did not, on all of
+them, at *p* = 0.018 — which at 5 versus 3 is again the floor (there is no complementary split at
+unequal group sizes, so 1/C(8,3) = 1/56 is attainable), i.e. **complete separation on every
+measure**. The rig held; one model's behaviour in this cell did not.
+
+Three things keep that from being a wire-counting artefact or a quality trade:
+
+* **Two independent sources agree.** `llm_calls` is counted off the wire by Cortex; `tool_calls` is
+  parsed out of the transcript. They rose ×3.37 and ×3.64 together. A miscount in one would not
+  move the other.
+* **The deliverable is identical.** All 16 repetitions passed, 0 confounded, and every produced
+  workbook has one sheet with 12–19 populated cells — the 09-09 `sonnet-5` outputs (14, 14, 13)
+  sit inside the range its own 09-08 outputs already spanned (13–19). The extra ×3.4 in spend
+  bought nothing: this is not a speed/quality trade, it is the same output reached the long way.
+* **Nothing we control changed**, and the wire only echoes the alias we sent. We therefore cannot
+  distinguish (a) a gateway-side change in what `claude-sonnet-5` resolves to from (b) a genuinely
+  fat tail in this cell that n=5 happened to miss. `sonnet-5`'s pooled cost CV here is **0.85**
+  (SD $0.2245 on a $0.2651 mean; range $0.1039–$0.7712) against `sonnet-4-6`'s **0.17** — so (b) is
+  entirely live, and either way the practical consequence is the same.
+
+**Why the probe is excluded from the published grid rather than pooled into it.** Pooling would make
+this one cell a two-session mixture while every other `sonnet-5` cell stays pure 09-08. The
+comparisons in §7.3–§7.6 — and the tokens-per-LLM-call constant in §7.2 — all rest on every cell
+having been measured under one set of conditions. Buying it for one cell at the price of that
+property would trade a stated limitation for a hidden confound. Both files stay on disk and are
+named in `results/profile-manifest.json` under `excluded`, with this reason recorded; the exclusion
+is here to keep the two conditions separable, not to suppress a result that contradicts a published
+prognosis.
+
+**What this changes.** `xlsx-fin-font-clean` moves from "marginal, ~3 more reps would settle it" to
+**not established, and not settleable by more repetitions while the cell drifts between sessions**.
+Note that the falsified claim was not the measurement — every figure the 09-08 grid produces still
+reproduces exactly, the only change to the published profile artefact being its exclusion-count
+line — it was the *forecast* built on it. Any power calculation on 5 repetitions estimates σ from
+those 5 repetitions, and here `sonnet-5`'s per-rep cost SD went from **$0.0453 (n=5, CV 0.33) to
+$0.2245 (n=8, CV 0.85)** once the probe was included — understated ~5×. Because required n scales
+with σ², the "~8 reps per cell" prescription understated the requirement by roughly **25×**, and
+that is the optimistic reading, the one where a stable distribution merely has a tail we had not
+sampled. The lesson is cheap and general: a reps-to-significance figure is only as good as its
+stationarity assumption, and the way to test that assumption is a re-run with a control model, not
+a larger n.
+
+### 7.3.3 Two cost estimators, and why both appear above
+
+Two different numbers can be called "the cost of a cell", and they are not interchangeable:
+
+| | How | Used for |
+|---|---|---|
+| **median profile** | take the median of each token column (uncached / cache-read / cache-write / output), *then* price it | **every published dollar figure in §7.3** — it is the cell's typical token profile, priced |
+| **per-rep** | price each repetition, *then* take statistics | SDs, Cohen's *d*, permutation tests — anything needing spread |
+
+They disagree, because the median of a sum is not the sum of the medians: on `xlsx-fin-font-clean`
+the same 5 versus 5 data gives a 33.5% saving one way and 26.0% the other. Quoting one beside the
+other's *p*-value without saying so is how a table goes stale, so `tools/cost_significance.py`
+prints both columns and every table above labels which it is using. The disagreement widens with
+skew — in the pooled row of §7.3.2 the two estimators do not even agree on the **sign**, which is
+itself a symptom of the right tail described there.
 
 ### 7.4 Token-efficiency is not cost-efficiency
 
@@ -546,15 +639,19 @@ supports (scenario B, §7.3.1):
 | Cell | median saving | is it established? |
 |---|---|---|
 | no-skill canary `cortex-pyfix-001` | 30% | **yes** — complete separation at n=5, and under scenario A too |
-| `xlsx-fin-font-clean` | 33% | **nearly** — *d* = 1.42, p = 0.056; ~3 more reps per cell would settle it |
+| `xlsx-fin-font-clean` | 33% | **no** — *d* = 1.42, p = 0.056, and the 3 extra reps/cell that was meant to settle it instead **reversed the sign** in a fresh session (§7.3.2). Unresolved, and more reps will not resolve it |
 | `xlsx-fin-colors` | 8% | **no** — 0.25 SE, p = 0.78. A tie; ~617 reps/cell to resolve |
 
 Earlier drafts of this document said "more cost-efficient in all 3 cells", which read as three
-independent confirmations when it was really one confirmation, one near-miss and one tie. The
-recommendation is unchanged — a tie is not a loss, and the two cells that do resolve both favour
-`sonnet-5` — but the third cell should not be counted as support. Note also that the scenario-A
-"swap" on `xlsx-fin-colors` is not established either (p = 0.397), so that cell is better
-described as *unresolved under both scenarios* than as *scenario-dependent*.
+independent confirmations when it was really one confirmation and two unresolved cells. **The
+recommendation is unchanged, and it is worth being precise about why it survives:** it rests on
+`sonnet-5` never being *established as dearer* anywhere, plus its 100% pass rate and the one cell
+that does separate. A tie is not a loss. But two of the three cells should not be counted as
+support, and on `xlsx-fin-font-clean` the honest statement is stronger than "unresolved" — that
+cell drifted ×3.4 in cost between sessions for `sonnet-5` while `sonnet-4-6` held to within 5%, so
+it currently supports **neither** direction. Note also that the scenario-A "swap" on
+`xlsx-fin-colors` is not established either (p = 0.397), so that cell is better described as
+*unresolved under both scenarios* than as *scenario-dependent*.
 
 **Use `claude-haiku-4-5` only behind a validator.** Most cost-efficient in every cell, by 1.5–4.2×
 over the next cheapest model — the narrow 1.5× is on `xlsx-fin-font-clean`, the cell where its 0.52
@@ -638,13 +735,26 @@ are not tight — see limitations.
    as a thin-but-real margin under B that "does not survive scenario A", which framed an absent
    answer as a scenario-dependent one. ~617 repetitions per cell would settle it; that is the one
    comparison in this profile where the honest move is to stop quoting it rather than to buy more
-   reps. Conversely `xlsx-fin-font-clean` sits at p = 0.056 and needs only ~8 reps per cell — the
-   cheapest available improvement to this report, and the reason the two are worth distinguishing
-   at all.
-5. **Two tasks in one narrow genre.** Both discriminators are financial-spreadsheet
+   reps. This report previously added that `xlsx-fin-font-clean`, at p = 0.056, needed only ~8 reps
+   per cell and was therefore the cheapest available improvement. **That prediction was tested and
+   is wrong** — see limitation 5.
+5. **One cell is not stationary across sessions, and we do not know why.** Re-running
+   `xlsx-fin-font-clean`/ON ~23 h later with everything we control held constant reproduced
+   `sonnet-4-6` to within 3% on every measure but gave `sonnet-5` ×3.4 the cost, ×3.4 the LLM calls
+   and ×4.1 the tokens for a byte-comparable deliverable, at the exact-test floor on every measure
+   (§7.3.2). We cannot tell a gateway-side change in what the `claude-sonnet-5` alias resolves to
+   from a fat tail that n=5 missed; the wire only echoes the alias we send. Two consequences.
+   First, **a reps-to-significance forecast is only as good as its stationarity assumption** — the
+   power figures in §7.3.1 estimate σ from 5 repetitions, and here σ was understated ~5×, which is
+   ~25× in required repetitions. Second,
+   **the rest of the grid was measured in a single session and has no such control**, so other
+   cells could carry drift we never sampled; the two-session probe exists on exactly one of 20
+   cells. The generalisable fix is not a larger n, it is a re-run with a control model — cheap,
+   and it is what turned an unexplained number into a located one here.
+6. **Two tasks in one narrow genre.** Both discriminators are financial-spreadsheet
    formatting. This is not a general coding benchmark.
-6. **`aws/` vs bare alias pricing** assumed identical; unprovable with a non-admin key.
-7. **Wall-clock is gateway-dependent** and was not load-controlled; treat it as indicative.
+7. **`aws/` vs bare alias pricing** assumed identical; unprovable with a non-admin key.
+8. **Wall-clock is gateway-dependent** and was not load-controlled; treat it as indicative.
 
 **What would change the conclusion:** if the gateway does *not* discount cache reads,
 absolute costs rise ~4–5× and cache-heavy agentic use becomes far more expensive in
@@ -665,14 +775,22 @@ python3 profile.py --run --reps 5         # the grid (~2.5 h, 100 invocations)
 python3 profile.py --freeze               # pin exactly which reps the profile is built from
 python3 profile.py --report               # recompile from the manifest, no invocations
 python3 pricing.py                        # the rate card
+python3 tools/cost_significance.py        # §7.3.1/§7.3.3: which cost gaps are established
+python3 tools/stability_probe.py          # §7.3.2: did font-clean/ON reproduce across sessions?
 ```
 
-Raw per-repetition records are in the gitignored `out/runs/` and `out/runs-archive/` — 244
-repetitions across 62 files. Which of them belong to this profile is pinned in
+The last two exist so that no *statistic* in this document is retyped either. Both read the frozen
+manifest through `profile.load()`, so a membership problem makes them shout in the same way
+`--report` does, and every *p*, Cohen's *d* and power figure quoted above is one line of their
+output.
+
+Raw per-repetition records are in the gitignored `out/runs/` and `out/runs-archive/` — 250
+repetitions across 64 files. Which of them belong to this profile is pinned in
 `results/profile-manifest.json` (48 files, 210 rows with a sha256 each, 209 counted; of those, 24
 grid files supply 150 grid repetitions — 149 after the confound filter — for §7's tables, and the
-rest are the phase 2–3 task records). Membership is excluded at two granularities: **14 files** by
-name (13 pre-grid development sweeps and one preflight canary) and **1 single repetition** keyed
+rest are the phase 2–3 task records). Membership is excluded at two granularities: **16 files** by
+name (13 pre-grid development sweeps, one preflight canary and the 2 stability-probe runs of
+§7.3.2) and **1 single repetition** keyed
 `basename#rep`. The per-rep granularity exists because the `select-deck` sonnet-4-6 file holds one
 contaminated repetition (46 LLM calls via a real subagent) beside two clean ones (7 calls each);
 excluding the whole file would have destroyed the very comparison that makes the contamination

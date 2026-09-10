@@ -181,6 +181,14 @@ this arm means genuinely ambiguous prompts, not more clear ones.
 | [`results/xlsx-cost-profile-20260909.txt`](results/xlsx-cost-profile-20260909.txt) | Raw compiled profile output — **current**. 18 cells at n=5, the 2 pass-rate discriminators at n≈30; read the `n` column |
 | [`results/xlsx-cost-profile-20260908.txt`](results/xlsx-cost-profile-20260908.txt) | The earlier flat-n=5 snapshot, kept for comparison. Reproducible only from the manifest as it stood at commit `f00124a` — `--report` today reads the current manifest and will not regenerate it |
 
+Two analysis tools recompute the statistical claims from the frozen manifest, so no significance
+figure in the evaluation is ever retyped:
+
+```bash
+python3 tools/cost_significance.py   # which cost gaps are established: exact permutation tests
+python3 tools/stability_probe.py     # did xlsx-fin-font-clean/ON reproduce across sessions? (no)
+```
+
 ### Monetary cost
 
 `pricing.py` holds the internal LiteLLM rate card, transcribed by hand from the gateway's
@@ -197,9 +205,11 @@ credential to read — when rates change, edit `PRICES` and bump `SOURCE_DATE`.
 
 `sonnet-5` is priced at **2/3 of `sonnet-4-6`**, which is how it can come out cheaper despite
 using more tokens — but only where the token gap is small enough for the price gap to cover it.
-It does on two of the three cells measured; on `xlsx-fin-colors` the two are statistically
-indistinguishable (7.9% apart, *p* = 0.78 — see §7.3.1 of the evaluation). `opus-5` is 2.5×
-`sonnet-5`.
+Its point estimate is cheaper on two of the three cells measured, and **only one of those three
+cells actually separates the two models**: the no-skill canary (29.9%, *p* = 0.008). On
+`xlsx-fin-colors` they are statistically indistinguishable (7.9% apart, *p* = 0.78, §7.3.1), and
+`xlsx-fin-font-clean` turned out not to be stationary — re-run a day later it reversed sign for
+`sonnet-5` while `sonnet-4-6` reproduced to within 5% (§7.3.2). `opus-5` is 2.5× `sonnet-5`.
 
 **Cache pricing is the one unverified input.** The gateway publishes only Input and Output
 rates while 81–97% of our prompt tokens are cache reads, so two scenarios are computed: **A**
