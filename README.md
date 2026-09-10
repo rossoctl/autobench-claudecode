@@ -7,6 +7,10 @@ in a fresh workspace, scored by a programmatic verdict.
 There is no LLM judge. A task passes when a command exits 0 — that is the whole point, and
 it is what separates a benchmark from a load generator.
 
+For the mechanics — the data path through a repetition, what supplies a task's inputs, how
+the verdict is scored, the invariants, and how to add a task — see
+[`DEVELOPER-GUIDE.md`](DEVELOPER-GUIDE.md).
+
 ## What measures what
 
 | Concern | Source |
