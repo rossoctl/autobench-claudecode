@@ -156,9 +156,11 @@ def compare(by, task, arm, m1, m2, scenario="B"):
 def verdict(r, n_have):
     if r["p"] <= 0.05:
         return "ESTABLISHED" if r["need"] <= n_have else "significant but underpowered"
+    # Deliberately not "would settle it": that phrasing was published once, acted on, and turned
+    # out to be false because the cell was not stationary. The figure is conditional, so say so.
     if r["need"] <= n_have * 2:
-        return f"marginal -- ~{r['need']} reps/cell would settle it"
-    return f"NO EVIDENCE either way -- would need ~{r['need']} reps/cell"
+        return f"marginal -- ~{r['need']} reps/cell IF stationary (see note below)"
+    return f"NO EVIDENCE either way -- would need ~{r['need']} reps/cell if stationary"
 
 
 def main():
