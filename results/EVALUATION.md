@@ -392,13 +392,26 @@ This also weakens the **swap** described above. Under scenario A the point estim
 Two further checks, so the fix does not leave a different overclaim standing:
 
 * **`haiku-4-5` cheapest** — established in every cell and both scenarios tested (p = 0.008 each).
-* **`opus-5` dearest** — established on the canary under both scenarios and on `xlsx-fin-colors`
-  under B (p = 0.040), but **not** on `xlsx-fin-colors` under A (p = 0.294): its gap over
-  `sonnet-5` there is swamped by `sonnet-5`'s own spread. The *ordering* is consistent in all six
-  cases; the statistical separation fails in one of them.
+* **`opus-5` dearest** — separated from `sonnet-5` in five of the six cases: the canary under both
+  scenarios and `xlsx-fin-font-clean` under both (p = 0.008 and 0.040) at full power, plus
+  `xlsx-fin-colors` under B (p = 0.048) but underpowered there — that one clears 0.05 on a sample
+  that would need ~18 reps/cell to do so reliably, so it is a pass, not a comfortable one. It fails
+  outright on `xlsx-fin-colors` under A (p = 0.294), where its gap over `sonnet-5` is swamped by
+  `sonnet-5`'s own spread. The *ordering* is consistent in all six cases; the statistical
+  separation fails in one of them.
 
 None of this changes the recommendation in §8 — `sonnet-5` is never dearer than `sonnet-4-6` with
 evidence behind it — but "all three cells" was doing work the data cannot support.
+
+Every figure in this section is recomputed from the frozen manifest by `tools/cost_significance.py`
+rather than retyped here. It prints two estimators side by side, because they are not
+interchangeable: the published dollar figures take the **median of each token column, then price**
+(the cell's typical token profile, priced), while any SD, Cohen's *d* or permutation test needs the
+cost of **each repetition, then statistics**. The median of a sum is not the sum of the medians, so
+these disagree — 33.5% versus 26.0% on `xlsx-fin-font-clean` from the very same data. The table
+above quotes the median-profile gap with the per-repetition *p*; that pairing is deliberate but
+worth stating, since quoting one estimator beside the other's *p*-value without saying so is how a
+table goes quietly wrong.
 
 ### 7.4 Token-efficiency is not cost-efficiency
 
