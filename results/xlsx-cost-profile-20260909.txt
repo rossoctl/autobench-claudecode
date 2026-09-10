@@ -85,6 +85,6 @@ Cache-read share of prompt tokens (how much context is re-read)
 
 ====================================================================================================
 n per cell: 5-30 -- UNEVEN, read the n column (20 cells; --reps was 5). CV on a 5-sample median is indicative, not tight.
-membership: frozen manifest: 48 files, 16 deliberately excluded, 1 single rep(s) excluded
+membership: frozen manifest: 48 files, 18 deliberately excluded, 1 single rep(s) excluded
 No dollar figures: Cortex leaves costMicros unpopulated, so pricing would be
 invented. Tokens are split by tier above -- apply your own rates.

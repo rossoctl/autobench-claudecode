@@ -454,10 +454,10 @@ table(s, rows, 0.7, 2.35, 11.9, [3.9, 2.0, 2.0, 2.0, 2.0], size=14,
                  (1, 4): WARN, (2, 4): WARN, (3, 4): WARN})
 box(s, "opus-5 used the FEWEST tokens on two of three cells —\nand is the MOST EXPENSIVE on all three.",
     0.7, 4.05, 5.6, 0.9, fill=INK, color=RGBColor(0xFF, 0xFF, 0xFF), size=14, bold=True)
-box(s, "sonnet-5 uses MORE tokens than sonnet-4-6 yet costs LESS\n"
-      "on 2 of 3 cells, at 2/3 the unit price — but only ONE of the\n"
-      "three separates them (canary, p=0.008). Colors is a TIE\n"
-      "(p=0.78); font-clean flipped sign on a re-run. Don't quote 2/3.",
+box(s, "sonnet-5 uses MORE tokens than sonnet-4-6 yet costs LESS on\n"
+      "2 of 3 cells, at 2/3 the unit price — but only ONE separates\n"
+      "them: canary, p=0.008, REPRODUCED at 30.6% next day. Colors\n"
+      "is a TIE (p=0.78); font-clean flipped. Don't quote 2 of 3.",
     6.75, 4.05, 5.6, 0.9, fill=INK, color=RGBColor(0xFF, 0xFF, 0xFF), size=11, bold=True)
 tb(s, "Same cells under scenario A (no cache discount). haiku stays cheapest and opus-5 dearest everywhere — the two sonnets\n"
       "appear to SWAP on xlsx-fin-colors, but neither ordering is established there (p = 0.78 under B, 0.40 under A):",
@@ -571,9 +571,9 @@ tb(s, "Model selection recommendation", 0.7, 0.75, 11.9, 0.7, 30,
 tb(s, "on the benchmark evidence, for skill-driven document work", 0.7, 1.35, 11.9, 0.35, 14, color=ICE)
 box(s, "ADOPT AS DEFAULT\n\nclaude-sonnet-5\n\n100% pass on every task, and never\n"
       "ESTABLISHED as dearer than\nsonnet-4-6 (scenario B): decisively\n"
-      "cheaper on the canary (30%,\np=0.008); colors a TIE (8%, p=0.78);\n"
-      "font-clean UNRESOLVED — it flipped\nsign on a re-run. Despite MORE\n"
-      "tokens: 2/3 unit price absorbs\n1.21×/call.",
+      "cheaper on the canary (30%,\np=0.008, and it REPRODUCED at 30.6%\n"
+      "a day later); colors a TIE (8%,\np=0.78); font-clean UNRESOLVED — it\n"
+      "flipped sign on a re-run. Despite\nMORE tokens: 2/3 unit price absorbs\n1.21×/call.",
     0.7, 2.0, 3.7, 2.85, fill=RGBColor(0xFF, 0xFF, 0xFF), size=11.5, color=BODY)
 box(s, "ONLY WITH A VALIDATOR\n\nclaude-haiku-4-5\n\nMost cost-efficient everywhere,\nby 1.5–4.2× over the next\ncheapest, and fastest. But it failed\n"
       "14 of 29 WITH the skill supplied,\nand 7 of those 15 assertion failures\nare invisible to review — incl. 3 that\nhardcoded values instead of formulas.\nRetry needs a validator.",
@@ -583,7 +583,8 @@ box(s, "NOT INDICATED HERE\n\nclaude-opus-5\n\nMost expensive in all three cells
     8.9, 2.0, 3.7, 2.85, fill=RGBColor(0xFF, 0xFF, 0xFF), size=12, color=BODY)
 tb(s, "Confidence: pass rates, the cheapest/dearest ordering and the token/cost inversion all hold across BOTH pricing\n"
       "scenarios; tokens/call holds across five independent cells. Absolute dollar figures are indicative — n=5 in 18 cells,\n"
-      "cache billing unverified, and only 1 of the 3 sonnet-vs-sonnet cells separates the two models at all.",
+      "cache billing unverified, and only 1 of the 3 sonnet-vs-sonnet cells separates the two models at all — that one\n"
+      "cell was re-measured a day later and held, but 18 of 20 cells have never been re-measured.",
    0.7, 5.1, 11.9, 0.7, 13, color=ICE)
 
 # ─────────────────────────────────────────────────────────── 15. limitations
@@ -593,12 +594,15 @@ rows = [["limitation", "consequence"],
         ["One skill (xlsx)", "every skill-specific conclusion is xlsx-specific; “free on opus-5” may be an xlsx property"],
         ["Uneven n: 18 cells at 5, 2 at ≈30", "chosen, not accidental — the 2 non-saturated pass rates got the reps. CV to 0.85, so a single cell's median is indicative; tokens/call constants are solid (5 cells agree)"],
         ["Not every $ gap is a finding", "the sonnet-5 vs sonnet-4-6 saving is established on only 1 of 3 cells (canary, p=0.008); colors is a tie (p=0.78, ~617 reps/cell to settle) and font-clean is unresolved"],
-        ["One cell is NOT stationary", "re-run 23 h later, sonnet-5 took ×3.4 cost / ×4.1 tokens on font-clean for the same output while sonnet-4-6 held to 3%. Gateway change vs fat tail: indistinguishable — the wire only echoes the alias"],
+        ["One cell is NOT stationary", "re-run 23 h later, sonnet-5 took ×3.4 cost / ×4.1 tokens on font-clean for the same output while sonnet-4-6 held to 3%. A second probe on the canary cell reproduced sonnet-5 to 0.1%, so it is cell-specific, not a gateway alias change — but stability proven on 1 cell says nothing about the other 18"],
         ["Cache billing unverified", "4–5× on ABSOLUTE cost; no headline ranking changes, and the sonnets' apparent swap on colors is an unresolved comparison, not a real reversal"],
         ["Two tasks, one narrow genre", "financial-spreadsheet formatting. Not a general coding benchmark"],
         ["aws/ vs bare alias pricing", "assumed identical; unprovable with a non-admin key"],
         ["Wall-clock not load-controlled", "gateway-dependent; treat as indicative only"]]
-table(s, rows, 0.7, 1.9, 11.9, [3.9, 8.0], size=11)
+# t=1.78, not 1.9: the stationarity row wraps to 3 lines, which pushes the table's RENDERED bottom
+# to ~5.16" -- add_table's nominal height is a lower bound, so this clearance is checked by
+# rendering the slide, not by reading the EMU.
+table(s, rows, 0.7, 1.78, 11.9, [3.9, 8.0], size=11)
 tb(s, "If the gateway does NOT discount cache reads, absolute costs rise ~4–5× and cache-heavy agentic use becomes far\n"
       "more expensive in aggregate — the ranking survives, but budget planning changes materially. If harder tasks were\n"
       "added, haiku’s reliability gap would likely widen and opus-5 might start earning its premium.",
