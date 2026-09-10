@@ -505,9 +505,11 @@ the font-clean one not at all.
 
 Two things follow. **Cost is not a measure of what a model did** — it follows the cache tier split,
 which follows run order; `tools/stability_probe.py` now decides reproduction on volume measures only
-(LLM calls, tool calls, tokens) and prints cost as a diagnostic beside them. **Nor is wall time**: it
-rose ×1.5–1.8 in the pyfix probe for both models including the warm repetitions, on identical token
-and call counts, which is a loaded laptop rather than a model.
+(LLM calls, tool calls, tokens) and prints cost as a diagnostic beside them. **Nor is wall time**: in
+the pyfix probe it rose ×1.51 (`sonnet-5`) and ×1.75 (`sonnet-4-6`) across all repetitions, and still
+×1.34 and ×1.81 on the warm repetitions alone, on identical token and call counts. A loaded laptop,
+not a model — and note how far apart those four ratios are for two models doing provably identical
+amounts of work, which is the measure telling you not to read it.
 
 **Verdict: cell-specific, not gateway-wide.** Reading (a) is out. A substitution behind the alias
 would have moved pyfix too, and there `sonnet-5` reproduced to within 0.1% on every volume measure
