@@ -17,7 +17,7 @@ result against the internal LiteLLM rate card.
 
 | Use | Model | Why |
 |---|---|---|
-| Default for skill-driven document work | **`claude-sonnet-5`** | 100% pass on every task, and more **cost-efficient** than `sonnet-4-6` in all 3 cells (scenario B) despite being *less* token-efficient |
+| Default for skill-driven document work | **`claude-sonnet-5`** | 100% pass on every task, and never dearer than `sonnet-4-6` with evidence behind it — **decisively cheaper on 1 of 3 cells, near-decisively on a 2nd, a tie on the 3rd** (scenario B, §7.3.1) — despite being *less* token-efficient |
 | Cost-sensitive, tolerant of retries | **`claude-haiku-4-5`** | Most **cost-efficient** in every cell, by 1.5–4.2× over the next cheapest, but only **52%** pass on the harder task (n=29) |
 | Not indicated by this evidence | `claude-opus-5` | Least **cost-efficient** in every cell — though the *most token-efficient*, so it may suit token-bound rather than bill-bound work |
 
@@ -195,8 +195,11 @@ cache reads**. Two scenarios are therefore reported:
 B lands roughly 4–5× below A. **Which the gateway actually bills is unverified** and should
 be confirmed against an invoice before either figure is quoted as fact.
 
-**The model ranking is identical under both scenarios in all three cells**, so the
-recommendation does not depend on resolving this.
+**The top-and-bottom ranking is identical under both scenarios in all three cells** — `haiku-4-5`
+cheapest, `opus-5` dearest — so the recommendation does not depend on resolving this. The *full*
+ordering is not identical: the two sonnets change places on `xlsx-fin-colors`. That looks like a
+scenario-dependent answer but is really an absent one — neither ordering is statistically
+established in that cell (§7.3.1).
 
 Two further caveats: the price pages are titled `aws/claude-*` while the benchmark pinned the
 bare aliases; both route and Cortex confirmed the bare alias was served, but identical
@@ -328,7 +331,11 @@ so the ~48% of runs that have to be redone are already paid for. This is the one
 n≈30 re-run moved: at n=5 it read 0.1075 on a 0.40 pass rate. The correction goes in haiku's
 favour (a better pass rate divides the same median cost by more), widening its margin over
 `sonnet-5` in this cell from 1.17× to 1.53× — still the narrowest of the three cells, and the ⚠️
-stands because that margin is small enough for the validator you need anyway to eat it.
+stands because that margin is small enough for the validator you need anyway to eat it. Propagating
+the pass rate's own 95% interval ([0.344, 0.686]) through the division: haiku's cost per solved task
+runs 0.0619–0.1234, i.e. a margin over `sonnet-5` of **2.04× at the optimistic end and 1.02× at the
+pessimistic end**. So haiku stays cheapest across the entire interval — but at the low end by 2%,
+which is a tie in all but name.
 
 Scenario A (no cache discount) for the same cells:
 
@@ -349,11 +356,49 @@ does not depend on the cache assumption. The middle of the field does: on `xlsx-
 two sonnets **swap** between scenarios (B: `sonnet-5` 0.1608 < `sonnet-4-6` 0.1746; A: 0.8920 >
 0.6677). `sonnet-5` carries ~2.1× the tokens at 2/3 the unit price, so which one wins depends on
 how hard cache reads are discounted. On the other two cells `sonnet-5` is cheaper under both.
-Treat the top-and-bottom ranking as robust and the mid-band ordering on that one cell as
-contingent on §9.3.
 
 **`opus-5` used the fewest tokens on two of three cells and is the most expensive on all
 three.** That is the entire case for pricing the measurement rather than counting tokens.
+
+### 7.3.1 Which of those cost differences are actually established
+
+A point estimate is not a finding. The tables above are medians over n=5, and the per-repetition
+cost spread is wide, so some of those gaps are solid and some are noise. Each gap below is an
+exact two-sided permutation test on per-repetition scenario-B cost (all 252 splits at n=5 vs 5).
+**Read `p = 0.008` as "the smallest value this design can produce"** — at 5 vs 5 the floor is
+2/252, so it means complete separation, not a large-sample certainty.
+
+The headline `sonnet-5` vs `sonnet-4-6` comparison, scenario B:
+
+| Cell | median saving | Cohen's *d* | exact *p* | reps/cell for 80% power | verdict |
+|---|---|---|---|---|---|
+| `cortex-pyfix-001` (canary) | 29.9% | 9.09 | **0.008** | already there at 5 | **established** |
+| `xlsx-fin-font-clean` (ON) | 33.5% | 1.42 | 0.056 | ~8 (have 5) | **3 more reps per cell would settle it** |
+| `xlsx-fin-colors` (ON) | 7.9% | 0.16 | 0.778 | **~617** | **a tie — no evidence either way** |
+
+So the honest statement is **not** "cheaper in all three cells". It is: decisively cheaper on the
+canary, near-decisively on `xlsx-fin-font-clean`, and *indistinguishable* on `xlsx-fin-colors`.
+The three cells look similar in the table and are epistemically miles apart — the colors gap is
+one quarter of a standard error, and settling it would take ~617 repetitions per cell (~$150 and
+most of a day) because `sonnet-5`'s cost CV in that cell is 0.42. That is the cell to stop
+quoting, not the cell to re-run.
+
+This also weakens the **swap** described above. Under scenario A the point estimates do reverse
+(`sonnet-4-6` 0.6677 < `sonnet-5` 0.8920), but that reversal is itself not established
+(p = 0.397). The correct reading is not "B and A disagree about which sonnet is cheaper here" but
+"**this cell does not resolve the two sonnets under either scenario**". The cache assumption
+(§9.3) decides where the point estimate lands; it does not rescue a comparison this noisy.
+
+Two further checks, so the fix does not leave a different overclaim standing:
+
+* **`haiku-4-5` cheapest** — established in every cell and both scenarios tested (p = 0.008 each).
+* **`opus-5` dearest** — established on the canary under both scenarios and on `xlsx-fin-colors`
+  under B (p = 0.040), but **not** on `xlsx-fin-colors` under A (p = 0.294): its gap over
+  `sonnet-5` there is swamped by `sonnet-5`'s own spread. The *ordering* is consistent in all six
+  cases; the statistical separation fails in one of them.
+
+None of this changes the recommendation in §8 — `sonnet-5` is never dearer than `sonnet-4-6` with
+evidence behind it — but "all three cells" was doing work the data cannot support.
 
 ### 7.4 Token-efficiency is not cost-efficiency
 
@@ -480,12 +525,23 @@ correct (fired nothing 3/3, so no over-eagerness).
 
 ## 8. Model selection recommendation
 
-**Adopt `claude-sonnet-5` as the default.** 100% pass on every task, and more
-**cost-efficient** than the incumbent `sonnet-4-6` in all 3 cells under scenario B — 33% on
-`xlsx-fin-font-clean`, 30% on the no-skill canary, 8% on `xlsx-fin-colors` — *despite being less
-token-efficient*. Its 2/3 unit price more than absorbs the 1.21× per-call context. The margin on
-`xlsx-fin-colors` is the thin one and it does not survive scenario A (§7.3); the other two cells
-hold under both.
+**Adopt `claude-sonnet-5` as the default.** 100% pass on every task, and **never dearer than the
+incumbent `sonnet-4-6` with evidence behind it** — *despite being less token-efficient*. Its 2/3
+unit price more than absorbs the 1.21× per-call context. Stated at the precision the data
+supports (scenario B, §7.3.1):
+
+| Cell | median saving | is it established? |
+|---|---|---|
+| no-skill canary `cortex-pyfix-001` | 30% | **yes** — complete separation at n=5, and under scenario A too |
+| `xlsx-fin-font-clean` | 33% | **nearly** — *d* = 1.42, p = 0.056; ~3 more reps per cell would settle it |
+| `xlsx-fin-colors` | 8% | **no** — 0.25 SE, p = 0.78. A tie; ~617 reps/cell to resolve |
+
+Earlier drafts of this document said "more cost-efficient in all 3 cells", which read as three
+independent confirmations when it was really one confirmation, one near-miss and one tie. The
+recommendation is unchanged — a tie is not a loss, and the two cells that do resolve both favour
+`sonnet-5` — but the third cell should not be counted as support. Note also that the scenario-A
+"swap" on `xlsx-fin-colors` is not established either (p = 0.397), so that cell is better
+described as *unresolved under both scenarios* than as *scenario-dependent*.
 
 **Use `claude-haiku-4-5` only behind a validator.** Most cost-efficient in every cell, by 1.5–4.2×
 over the next cheapest model — the narrow 1.5× is on `xlsx-fin-font-clean`, the cell where its 0.52
@@ -560,14 +616,22 @@ are not tight — see limitations.
    chosen and labelled, and a defect when it arrives through a glob.
 3. **Cache billing unverified** — the largest single uncertainty (4–5× on absolute cost). It does
    not change the conclusions that matter: `haiku-4-5` is cheapest and `opus-5` dearest in every
-   cell under both scenarios, and the token/cost inversion holds either way. It *does* decide one
-   mid-band ordering — `sonnet-5` vs `sonnet-4-6` on `xlsx-fin-colors` swaps between scenarios
-   (§7.3) — so do not quote that pair's ordering on that cell without settling the cache question
-   against a real invoice.
-4. **Two tasks in one narrow genre.** Both discriminators are financial-spreadsheet
+   cell under both scenarios, and the token/cost inversion holds either way. Do not quote an
+   absolute dollar figure without settling it against a real invoice.
+4. **Not every cost gap in §7.3 is a finding.** The tables are medians over n=5 and the
+   per-repetition spread is wide, so §7.3.1 tests each gap that a conclusion rests on. One result
+   is worth carrying: **the two sonnets are not resolved on `xlsx-fin-colors` under either
+   scenario** (B: 8% apart, p = 0.78; A: 25% apart the other way, p = 0.40). It had been reported
+   as a thin-but-real margin under B that "does not survive scenario A", which framed an absent
+   answer as a scenario-dependent one. ~617 repetitions per cell would settle it; that is the one
+   comparison in this profile where the honest move is to stop quoting it rather than to buy more
+   reps. Conversely `xlsx-fin-font-clean` sits at p = 0.056 and needs only ~8 reps per cell — the
+   cheapest available improvement to this report, and the reason the two are worth distinguishing
+   at all.
+5. **Two tasks in one narrow genre.** Both discriminators are financial-spreadsheet
    formatting. This is not a general coding benchmark.
-5. **`aws/` vs bare alias pricing** assumed identical; unprovable with a non-admin key.
-6. **Wall-clock is gateway-dependent** and was not load-controlled; treat it as indicative.
+6. **`aws/` vs bare alias pricing** assumed identical; unprovable with a non-admin key.
+7. **Wall-clock is gateway-dependent** and was not load-controlled; treat it as indicative.
 
 **What would change the conclusion:** if the gateway does *not* discount cache reads,
 absolute costs rise ~4–5× and cache-heavy agentic use becomes far more expensive in

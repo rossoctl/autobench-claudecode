@@ -195,15 +195,21 @@ credential to read — when rates change, edit `PRICES` and bump `SOURCE_DATE`.
 | `claude-sonnet-5` | **1.52** | **7.60** |
 | `claude-opus-5` | 3.80 | 19.00 |
 
-`sonnet-5` is priced at **2/3 of `sonnet-4-6`**, which is why it wins on cost despite using
-more tokens. `opus-5` is 2.5× `sonnet-5`.
+`sonnet-5` is priced at **2/3 of `sonnet-4-6`**, which is how it can come out cheaper despite
+using more tokens — but only where the token gap is small enough for the price gap to cover it.
+It does on two of the three cells measured; on `xlsx-fin-colors` the two are statistically
+indistinguishable (7.9% apart, *p* = 0.78 — see §7.3.1 of the evaluation). `opus-5` is 2.5×
+`sonnet-5`.
 
 **Cache pricing is the one unverified input.** The gateway publishes only Input and Output
 rates while 81–97% of our prompt tokens are cache reads, so two scenarios are computed: **A**
 bills every prompt token at the Input rate (upper bound), **B** applies the standard
-`cacheRead ×0.10 / cacheWrite ×1.25` convention. B lands ~4–5× below A. **The model ranking
-is identical under both**, so conclusions do not depend on resolving it — but confirm against
-an invoice before quoting an absolute figure.
+`cacheRead ×0.10 / cacheWrite ×1.25` convention. B lands ~4–5× below A. **The top and bottom of
+the ranking are identical under both** — `haiku-4-5` cheapest, `opus-5` dearest in every cell — so
+the recommendation does not depend on resolving it. The *full* ordering is not identical: the two
+sonnets change places on `xlsx-fin-colors`. That reads as a scenario-dependent answer but is
+really an absent one, since neither ordering is statistically established in that cell. Confirm
+against an invoice before quoting an absolute figure.
 
 ## Comparing models
 
