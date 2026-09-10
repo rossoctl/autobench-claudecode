@@ -12,6 +12,32 @@ here:
 | `results/EVALUATION.md` | the study itself — results, statistics, limitations |
 | this file | the data path, the contracts, the invariants, how to extend it |
 
+**Contents**
+
+1. [What is being measured](#1-what-is-being-measured)
+2. [Repository map](#2-repository-map)
+3. [The data path, end to end](#3-the-data-path-end-to-end)
+4. [Inputs](#4-inputs) — [task anatomy](#41-task-directory-anatomy) ·
+   [what the workspace holds](#42-what-the-workspace-contains--and-usually-does-not) ·
+   [**who supplies content vs. formatting**](#43-who-supplies-the-content-and-who-supplies-the-formatting) ·
+   [the prompt contract](#44-the-prompt-contract) · [the three arms](#45-the-three-arms) ·
+   [skill isolation](#46-skill-isolation) · [the invocation](#47-the-exact-invocation) ·
+   [`meta.json`](#48-metajson-keys)
+5. [Evaluation](#5-evaluation) — [pytest verdict](#51-stream-1--artifact-correctness-by-pytest) ·
+   [tamper check](#52-stream-2--tamper-check) ·
+   [wire attribution](#53-stream-3--attribution-from-the-transcript-and-the-wire) ·
+   [selection scoring](#54-selection-scoring) ·
+   [confounds](#55-confounds--void-not-failed) ·
+   [the OFF-arm gate](#56-the-gate-upstream-of-everything)
+6. [The measurement side](#6-the-measurement-side)
+7. [Adding a task](#7-adding-a-task)
+8. [Command reference](#8-command-reference)
+9. [Membership and the freeze workflow](#9-membership-and-the-freeze-workflow)
+10. [The NDJSON row](#10-the-ndjson-row)
+11. [Invariants](#11-invariants)
+12. [Debugging](#12-debugging)
+13. [Security](#13-security)
+
 ---
 
 ## 1. What is being measured
@@ -136,8 +162,13 @@ Only two tasks ship real input files:
 | `cortex-pyfix-001` | `billing.py` + `test_billing.py` | repair |
 | `select-none` | `shipping.py` + `test_shipping.py` | repair |
 
-**Who supplies what.** The artifact the evaluator grades is produced entirely by the agent,
-from three separate sources. Keeping them separate is what makes the benchmark work.
+### 4.3 Who supplies the content, and who supplies the formatting
+
+A recurring question, and the one most worth being precise about: **the evaluator grades an
+`.xlsx` file — so where does that file come from, and who decided what is in it?**
+
+The file is produced entirely by the agent under test. Its ingredients arrive from three
+different places, and keeping them separate is what makes the benchmark work.
 
 | Element | Source |
 |---|---|
@@ -147,12 +178,12 @@ from three separate sources. Keeping them separate is what makes the benchmark w
 | **formatting — font, colors, number formats** | **absent from the prompt.** This is the skill's contribution, and it is the treatment being measured |
 | the `.xlsx` bytes | the agent: `Write` a Python script, `Bash` run it, using `openpyxl` from the harness venv — which is on the agent's `PATH` deliberately (see the comment atop `requirements.txt`) |
 
-There is no spreadsheet-writing tool; the agent authors code. Across the 142 pinned xlsx
-repetitions the tool histogram is `Bash` 725, `Write` 113, `Read` 69, `Edit` 23, `Skill`
-16, `Agent` 1 — that last one being the single subagent-confound repetition.
+There is no spreadsheet-writing tool. The agent authors code and executes it. Across the
+142 pinned xlsx repetitions the tool histogram is `Bash` 725, `Write` 113, `Read` 69,
+`Edit` 23, `Skill` 16, `Agent` 1 — that last being the single subagent-confound repetition.
 
-**The harness never generates, seeds, or modifies an `.xlsx`.** It only reads the one the
-agent produced:
+**The harness never generates, seeds, or modifies an `.xlsx`.** It supplies prose and reads
+back whatever the agent produced:
 
 ```
 prompt.md  ──facts, numbers──►  claude -p  ──writes .py, runs it──►  model.xlsx
@@ -165,9 +196,21 @@ skill      ──conventions────►      │                            
 
 Content is pinned so repetitions are comparable and the assertions can be mechanical;
 formatting is unspecified so the skill is the only possible source of it. Name the font in
-the prompt and both arms pass; omit the numbers and no two repetitions are comparable.
+the prompt and both arms pass — the discriminator is gone. Omit the numbers and no two
+repetitions are comparable.
 
-### 4.3 The prompt contract
+**The same split holds for every task kind, with a different thing left unspecified:**
+
+| Task kind | Content comes from | What is left unspecified — i.e. what is measured |
+|---|---|---|
+| compliance, generative (`xlsx-*`) | the prompt's numbers | presentation conventions, supplied only by the skill |
+| repair (`cortex-pyfix-001`) | `workspace/billing.py` plus `test_billing.py`, which **is** the specification | whether the agent can make a visible spec pass without editing it |
+| selection (`select-*`) | the prompt's request | which skill the agent reaches for, when none is named |
+
+In every case the harness fixes the inputs and leaves exactly one thing to the agent, so
+that whatever the verdict measures has only one possible cause.
+
+### 4.4 The prompt contract
 
 **A compliance prompt must never name the convention under test.** From
 `tasks/xlsx-fin-font-clean/prompt.md`:
@@ -183,7 +226,7 @@ Prompts are ordinary business requests with concrete numbers, so the artifact is
 checkable: base 7,200,000, upside 6,150,000, show the saving and the saving as a share of
 base, "both calculated."
 
-### 4.4 The three arms
+### 4.5 The three arms
 
 | Arm | Prompt | `--allowedTools` | Skills in config dir | Role |
 |---|---|---|---|---|
@@ -195,7 +238,7 @@ base, "both calculated."
 model reach for the right skill unprompted." It is scored from the transcript, not by
 pytest.
 
-### 4.5 Skill isolation
+### 4.6 Skill isolation
 
 `main` builds a curated `CLAUDE_CONFIG_DIR` (`harness.py:557`) containing a `skills/`
 directory holding **exactly the task's skill, or nothing at all**, copied from
@@ -208,7 +251,7 @@ Note it is `CLAUDE_CONFIG_DIR` that scopes user skills — **not `HOME`**. That 
 established by measurement, and getting it wrong silently leaks the real skill library into
 the control arm.
 
-### 4.6 The exact invocation
+### 4.7 The exact invocation
 
 ```
 claude -p <prompt> \
@@ -218,7 +261,7 @@ claude -p <prompt> \
        --output-format stream-json --verbose
 ```
 
-run with `cwd=ws` and the sanitized environment from §3.4.
+run with `cwd=ws` and the sanitized environment from §3, step 4.
 
 - The tool allow-list is deliberately narrow. `meta.json` may add to it via
   `allowed_tools_extra` — the docx skill mandates a Node library, so without
@@ -229,7 +272,7 @@ run with `cwd=ws` and the sanitized environment from §3.4.
   `--model` beats both, and `model_pin_honoured` verifies on the wire that it took.
 - `--output-format stream-json --verbose` is what makes the transcript machine-readable.
 
-### 4.7 `meta.json` keys
+### 4.8 `meta.json` keys
 
 | Key | Meaning |
 |---|---|
@@ -250,7 +293,16 @@ others can be fooled.
 ### 5.1 Stream 1 — artifact correctness, by pytest
 
 `pytest -q` runs in the workspace under the repo venv (`pytest_run`, `harness.py:270`),
-after the agent has exited. Placement of the suite is the central design decision:
+after the agent has exited.
+
+**What the evaluator sees is only the artifact.** It opens the single `.xlsx` the agent left
+in the workspace — via `openpyxl`, exactly as any downstream consumer would — and asserts
+against it. It reads no transcript, no prompt, and no intermediate script; it does not know
+which arm or model produced the file, and it has no channel through which it could. Zero or
+several `.xlsx` files is a loud failure rather than a guess about which one to grade. Where
+that file came from is §4.3.
+
+Placement of the suite is the central design decision:
 
 **Hidden verdict** (`tasks/<id>/verdict/test_compliance.py`) — installed only *after* the
 agent exits. For a compliance task the test *enumerates the conventions*, so an agent that
@@ -386,7 +438,7 @@ total, so scaling a dollar figure by a token ratio is wrong. Call `pricing.cost(
 ## 7. Adding a task
 
 1. **Write `prompt.md`** as a plain business request with concrete numbers. Do not name the
-   convention you intend to test (§4.3).
+   convention you intend to test (§4.4).
 2. **Choose the convention.** It must be **arbitrary, not good practice** — something a
    competent agent would not do by default. Good practice is what the model already does,
    so the skill cannot show up. See `README.md` for the heuristic and the six tasks it
