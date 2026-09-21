@@ -36,7 +36,7 @@ sees tool calls but not tokens.
   it, and that is the interpreter every published repetition was measured on.
 
 ```bash
-uv venv --python "$(cat .python-version)" && uv pip install -r requirements.txt
+uv venv --python "$(cat .python-version)" && uv pip sync requirements.lock
 abctl service start                     # Cortex, on 47600/47601
 ```
 

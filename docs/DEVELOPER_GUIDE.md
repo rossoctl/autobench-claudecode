@@ -92,12 +92,13 @@ A repetition is *not* one LLM call. A single task issues several — across the 
 git clone https://github.com/rossoctl/autobench-claudecode.git
 cd autobench-claudecode
 
-# The venv is pinned to the interpreter the published grid was measured on (.python-version).
+# The venv is pinned to the interpreter the published grid was measured on (.python-version),
+# and requirements.lock pins the verdict libraries to the versions that scored it.
 uv venv --python "$(cat .python-version)"
-uv pip install -r requirements.txt
+uv pip sync requirements.lock
 
-# No uv? The stdlib works, but nothing then enforces the pin -- check it afterwards.
-# python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+# No uv? The stdlib works, but nothing then enforces either pin -- check both afterwards.
+# python3 -m venv .venv && .venv/bin/pip install -r requirements.lock
 
 # optional: put the CLI on PATH. It resolves its own real path, so a symlink still
 # finds the clone it belongs to.
@@ -123,6 +124,13 @@ one of the 193 published repetitions was measured on **3.14.3 with pytest 9.1.1 
 that is what `.python-version` records. Rebuilding it on a different interpreter or a newer
 openpyxl is a change to the instrument, and a verdict that flips for that reason is
 indistinguishable, in the rows, from a model that got worse.
+
+`requirements.txt` states the *intent* (`openpyxl>=3.1`) and is the file to edit;
+`requirements.lock` states the *apparatus* (`openpyxl==3.1.5`, with hashes) and is the file to
+install. Regenerate it with
+`uv pip compile requirements.txt --python-version 3.14 --generate-hashes -o requirements.lock`,
+and treat the result as a change to the instrument: a bump to a verdict library can move a pass
+rate on its own, so re-run the canary before attributing any movement to a model.
 
 This is also why the CLI is not a `uv tool install`: a tool environment is isolated from the
 clone, and this CLI needs `tasks/`, `out/`, `harness.py` and that exact venv, all resolved

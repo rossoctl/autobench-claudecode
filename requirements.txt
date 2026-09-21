@@ -1,5 +1,10 @@
 # Verdict-side dependencies. The agent under test also gets this venv on its PATH, so
 # anything a task's verdict needs to assert must be importable here too.
+#
+# This file is the INTENT. Install requirements.lock instead -- it pins these to the exact
+# versions that scored the published grid, which is a property of the instrument rather than a
+# preference. After editing here, regenerate it:
+#   uv pip compile requirements.txt --python-version 3.14 --generate-hashes -o requirements.lock
 pytest>=8
 openpyxl>=3.1
 python-docx>=1.1
