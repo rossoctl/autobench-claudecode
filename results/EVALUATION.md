@@ -823,7 +823,8 @@ premium.
 ## 10. Reproducing
 
 ```bash
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+uv venv --python "$(cat .python-version)"   # 3.14.3 -- the apparatus, see below
+uv pip sync requirements.lock
 abctl service start                       # Cortex, forward + tls_bridge
 python3 -m pytest -q                      # the harness's own tests (confound detector)
 python3 tools/negcontrol_confound.py      # prove the detector fires; exits non-zero if not
@@ -834,6 +835,15 @@ python3 pricing.py                        # the rate card
 python3 tools/cost_significance.py        # §7.3.1/§7.3.3: which cost gaps are established
 python3 tools/stability_probe.py          # §7.3.2: which cells reproduced across sessions (--task)
 ```
+
+**The apparatus matters to this list.** The venv runs the verdict that decides passed/failed,
+and `harness.py` puts its `bin/` on the agent's `PATH`, so it is inside the experiment rather
+than around it. Every repetition below was measured on **Python 3.14.3, pytest 9.1.1, openpyxl
+3.1.5** — one apparatus throughout, the venv having been created a minute before the first
+recorded row. `.python-version` and `requirements.lock` pin that; a reproduction on a different
+openpyxl can move a compliance pass rate with no model involved. Rows recorded after
+2026-09-21 carry `py_venv` and `venv_packages` and can be checked directly; the 193 here
+predate those fields.
 
 The last two exist so that no *statistic* in this document is retyped either. Both read the frozen
 manifest through `profile.load()`, so a membership problem makes them shout in the same way
