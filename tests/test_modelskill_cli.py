@@ -19,6 +19,7 @@ import importlib.util
 import inspect
 import json
 import pathlib
+import re
 import sys
 
 import pytest
@@ -250,6 +251,54 @@ def test_doctor_blocks_on_a_missing_instrument(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "BLOCK" in out and "abctl service start" in out
     assert "claude CLI" in out and "not on PATH" in out
+
+
+def _locked():
+    """name -> version from requirements.lock, so these tests track the real pins."""
+    return {m.group(1).lower().replace("_", "-"): m.group(2) for m in re.finditer(
+        r"(?m)^([A-Za-z0-9._-]+)==([^\s\\;]+)", (pms.ROOT / "requirements.lock").read_text())}
+
+
+def test_a_drifted_apparatus_warns_and_does_not_block(monkeypatch):
+    """A venv on the wrong interpreter still measures; it just stops being comparable to the
+    frozen grid. That is the consumer's call, so it is a warning -- and a warning must not
+    become an exit code, or `doctor` in a script fails for a judgement call."""
+    pkgs = dict(_locked(), openpyxl="3.2.0")      # one bumped library, the realistic case
+    monkeypatch.setattr(pms.harness, "apparatus", lambda: {
+        "py_driver": "3.12.12", "py_venv": "3.12.12", "venv_packages": pkgs})
+    rows = pms.apparatus_checks()
+    assert [r[0] for r in rows] == [pms.WARN, pms.WARN]
+    detail = " ".join(r[2] for r in rows)
+    assert "3.14.3" in detail, "the warning must name the version that is pinned"
+    assert "openpyxl 3.2.0 != 3.1.5" in detail, "and which library drifted, with both versions"
+    assert pms.BLOCK not in [r[0] for r in rows]
+
+
+def test_a_drifted_verdict_library_outranks_its_transitive_dependencies(monkeypatch):
+    """With several drifts only three are shown, and alphabetical order shows `et-xmlfile`
+    before `openpyxl` -- burying the one the reader chose and can act on."""
+    monkeypatch.setattr(pms.harness, "apparatus", lambda: {
+        "py_driver": "3.14.3", "py_venv": "3.14.3", "venv_packages": {}})
+    detail = [r[2] for r in pms.apparatus_checks() if "packages" in r[1]][0]
+    shown = detail.split("(")[1].split(")")[0]
+    assert "openpyxl" in shown and "pytest" in shown
+    assert "et-xmlfile" not in shown, "a transitive dependency took a slot from a chosen one"
+
+
+def test_a_matching_apparatus_is_silent(monkeypatch):
+    pin = (pms.ROOT / ".python-version").read_text().strip()
+    monkeypatch.setattr(pms.harness, "apparatus", lambda: {
+        "py_driver": "3.14.3", "py_venv": pin, "venv_packages": _locked()})
+    assert [r[0] for r in pms.apparatus_checks()] == [pms.OK, pms.OK]
+
+
+def test_a_missing_library_is_reported_as_missing_not_as_a_version(monkeypatch):
+    """`None != 3.1.5` rendered naively reads as a version called None."""
+    monkeypatch.setattr(pms.harness, "apparatus", lambda: {
+        "py_driver": "3.14.3", "py_venv": (pms.ROOT / ".python-version").read_text().strip(),
+        "venv_packages": {}})
+    detail = [r[2] for r in pms.apparatus_checks() if "packages" in r[1]][0]
+    assert "MISSING" in detail and "None" not in detail
 
 
 def test_doctor_reports_credentials_by_digest_only():

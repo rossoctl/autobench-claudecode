@@ -42,6 +42,7 @@ import json
 import math
 import os
 import pathlib
+import re
 import shlex
 import shutil
 import socket
@@ -143,6 +144,51 @@ def _secret_shape(value):
     return "unset" if not value else f"set sha256:{hashlib.sha256(value.encode()).hexdigest()[:8]}"
 
 
+def apparatus_checks():
+    """Is the venv the one the published grid was measured with?
+
+    WARN and not BLOCK, deliberately. A drifted apparatus does not stop you measuring anything;
+    it stops your numbers being comparable to the frozen grid, and that is your call to make.
+    (`tests/test_apparatus.py` is the strict version of this check, for contributors about to
+    add rows to that grid.)
+    """
+    out, a = [], harness.apparatus()
+    pin_file = ROOT / ".python-version"
+    pin = pin_file.read_text().strip() if pin_file.exists() else None
+    if not pin:
+        out.append((WARN, "venv python", f"{a['py_venv']} -- no .python-version to compare"))
+    else:
+        same = a["py_venv"] == pin
+        out.append(((OK if same else WARN), "venv python",
+                    f"{a['py_venv']}" + ("" if same else f" but .python-version pins {pin} -- "
+                                         f"the venv runs the verdict and sits on the agent's "
+                                         f"PATH, so this changes the instrument")))
+    lock = ROOT / "requirements.lock"
+    if not lock.exists():
+        out.append((WARN, "venv packages", f"{len(a['venv_packages'])} installed, no lock file"))
+        return out
+    want = {m.group(1).lower().replace("_", "-"): m.group(2)
+            for m in re.finditer(r"(?m)^([A-Za-z0-9._-]+)==([^\s\\;]+)", lock.read_text())}
+    drift = {n: (a["venv_packages"].get(n), v) for n, v in want.items()
+             if a["venv_packages"].get(n) != v}
+    if drift:
+        # Show the libraries we CHOSE before their transitive dependencies. Alphabetical order
+        # puts `et-xmlfile` in front of `openpyxl`, which buries the one a reader can act on --
+        # requirements.txt is the list of deliberate choices, so it decides precedence.
+        declared = {m.group(1).lower().replace("_", "-") for m in
+                    re.finditer(r"(?m)^([A-Za-z0-9._-]+)", (ROOT / "requirements.txt").read_text())
+                    } if (ROOT / "requirements.txt").exists() else set()
+        order = sorted(drift, key=lambda n: (n not in declared, n))
+        shown = ", ".join(f"{n} {drift[n][0] or 'MISSING'} != {drift[n][1]}" for n in order[:3])
+        out.append((WARN, "venv packages",
+                    f"{len(drift)} of {len(want)} differ from requirements.lock ({shown}"
+                    + (", ..." if len(drift) > 3 else "")
+                    + ") -- a verdict library can move a pass rate on its own"))
+    else:
+        out.append((OK, "venv packages", f"all {len(want)} match requirements.lock"))
+    return out
+
+
 def doctor_checks():
     out = []                      # (level, name, detail)
 
@@ -165,15 +211,17 @@ def doctor_checks():
     # The verdict always runs under the repo venv, whatever interpreter drives the CLI, so
     # openpyxl missing there means every xlsx task fails for a harness reason.
     if not pathlib.Path(harness.VENV_PY).exists():
-        out.append((BLOCK, "venv", f"{harness.VENV} missing -- python3 -m venv .venv && "
-                                   ".venv/bin/pip install -r requirements.txt"))
+        out.append((BLOCK, "venv", f"{harness.VENV} missing -- uv venv --python "
+                                   f"\"$(cat .python-version)\" && uv pip sync "
+                                   f"requirements.lock"))
     else:
         r = subprocess.run([harness.VENV_PY, "-c", "import pytest, openpyxl"],
                            capture_output=True, text=True)
         out.append(((OK if r.returncode == 0 else BLOCK), "venv",
                     f"{harness.VENV} " + ("pytest + openpyxl importable" if r.returncode == 0
-                                          else "MISSING deps -- .venv/bin/pip install -r "
-                                               "requirements.txt")))
+                                          else "MISSING deps -- uv pip sync "
+                                               "requirements.lock")))
+        out.extend(apparatus_checks())
 
     alive = harness.cortex_alive()
     out.append(((OK if alive else BLOCK), "cortex session api",

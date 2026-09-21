@@ -207,6 +207,8 @@ $ profile-modelskill doctor
 [  ok  ] python              3.12.7 (/usr/bin/python3)
 [  ok  ] claude CLI          2.1.257 (Claude Code)  (/Users/you/.local/bin/claude)
 [  ok  ] venv                /repo/.venv pytest + openpyxl importable
+[  ok  ] venv python         3.14.3
+[  ok  ] venv packages       all 13 match requirements.lock
 [  ok  ] cortex session api  http://127.0.0.1:47601/healthz 200
 [  ok  ] cortex proxy        http://127.0.0.1:47600 accepting
 [  ok  ] cortex CA           /Users/you/.cortex/ca/ca.crt (570 bytes, sha256:1a2b3c4d)
@@ -217,13 +219,19 @@ $ profile-modelskill doctor
 [  ok  ] run lock            free (/repo/out/.harness.lock)
 [  ok  ] sse capture         not running; the harness will start and stop its own
 
-12 ok, 0 warning(s), 0 blocker(s)
+14 ok, 0 warning(s), 0 blocker(s)
 ```
 
 Every blocker makes a repetition **unmeasurable**, not merely degraded — with Cortex down the
 row self-flags and every token field is 0. Exit status is 1 when any blocker is present, so
 `doctor` works in a script. Credentials are reported as a **sha256 prefix only**; the digests
 above are illustrative.
+
+The two apparatus rows are **warnings, never blockers**: a venv on a different interpreter or an
+unlocked openpyxl still measures, it just stops being comparable to the published grid, and that
+is your call rather than the tool's (§2.2). Note the first row and the `venv python` row differ
+legitimately — the sample above drives the CLI with system 3.12 against the pinned 3.14.3 venv,
+which is supported and is why the row records both (§12).
 
 ### 3.2 What you can benchmark
 
@@ -443,7 +451,7 @@ developer-facing entry points and are documented in §10.
 | `tasks/` | 7 active tasks |
 | `tasks-retired/` | 9 discarded tasks, each with a `DISCARDED.md` stating why. **A discarded task is a result** |
 | `tools/` | task generators plus the controls and analysis tools |
-| `tests/` | 55 tests guarding the confound detector, workspace setup, the result-event whitelist, the apparatus pins and the CLI's reporting |
+| `tests/` | 59 tests guarding the confound detector, workspace setup, the result-event whitelist, the apparatus pins and the CLI's reporting |
 | `results/` | `EVALUATION.md`, the frozen manifest, the cost-profile artifacts, the generated deck |
 | `out/` | **gitignored.** Per-run NDJSON and the raw SSE capture, which contains full prompts |
 | `out/modelskill/` | where the CLI writes by default — outside `profile.RUN_DIRS`, so consumer runs cannot join the published grid |
@@ -861,7 +869,7 @@ it. Cortex must be reachable either way — session API on `127.0.0.1:47601`, pr
 | `.venv/bin/python tools/cost_significance.py` | which cost gaps are established |
 | `.venv/bin/python tools/stability_probe.py --task <id>` | which cells reproduce across sessions |
 | `.venv/bin/python tools/make_summary_deck.py` | regenerate the deck |
-| `.venv/bin/python -m pytest -q` | 55 tests |
+| `.venv/bin/python -m pytest -q` | 59 tests |
 
 `harness.py` flags: `--reps`, `--out` (default `out/runs`), `--arm {on,off,select}`,
 `--model`.
@@ -1024,6 +1032,8 @@ Each of these prevents a failure that actually happened.
 | `skill_leaked_into_off_arm` | config dir not clean, or `CLAUDE_CODE_DISABLE_BUNDLED_SKILLS` not set |
 | `no_artifact_produced` | the skill needs a tool that is not allowed. Add `allowed_tools_extra`; do **not** score it |
 | `bad_baseline` | in-workspace tests already pass — the task measures nothing |
+| a pass rate moved and no model or task changed | the apparatus did. Run `doctor`: `venv python` / `venv packages` compare the venv against `.python-version` and `requirements.lock`, and a row's `py_venv` / `venv_packages` say what it was measured with (§12) |
+| `pytest` fails in `tests/test_apparatus.py` | the venv drifted from the pins. `uv venv --python "$(cat .python-version)" && uv pip sync requirements.lock` |
 | `multiple_models` | a concurrent run leaked into the window. Check the lock |
 | `IsADirectoryError` mid-run | a `__pycache__/` in `verdict/` reached a flat copy. See invariant 2 |
 | `--report` prints `!! MEMBERSHIP PROBLEM` | a manifest file is missing or its bytes changed. Do not freeze over it — find out why |
