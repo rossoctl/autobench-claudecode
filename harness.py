@@ -569,6 +569,15 @@ def assemble_skill(skill, dest, variant=None):
                      f"has no reference to.")
         body, text, kind = tgt.read_text(), _op_text(op, vd), op["op"]
         if kind == "prepend":
+            # Every SKILL.md opens with YAML frontmatter, and that frontmatter is what registers
+            # the skill's name and description. Text above it would leave Claude Code loading a
+            # skill it cannot name: the ON arm would silently receive NOTHING and still produce
+            # rows. To hoist a section to the top, replace_once the first heading instead.
+            if body.startswith("---"):
+                sys.exit(f"overlay op prepend on {op['file']} would land ABOVE its YAML "
+                         f"frontmatter, which is what registers the skill -- the ON arm would "
+                         f"then silently receive no skill at all. Use replace_once on the "
+                         f"first heading, with the heading repeated at the end of your text.")
             body = text + body
         elif kind == "append":
             body = body + text

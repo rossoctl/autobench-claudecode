@@ -50,11 +50,18 @@ skills/pptx-v2/
   "description": "one line: what hypothesis this variant tests",
   "base": {"SKILL.md": "<sha256 of the installed file this was written against>"},
   "ops": [
-    {"file": "SKILL.md", "op": "prepend", "text_file": "requirements.md"},
+    {"file": "SKILL.md", "op": "replace_once", "find": "# <the skill's first heading>",
+     "text_file": "requirements.md"},
     {"file": "SKILL.md", "op": "replace_once", "find": "<short anchor>", "text_file": "qa.md"}
   ]
 }
 ```
+
+To hoist a section **to the top**, `replace_once` the first heading and repeat that heading at the
+end of your fragment — do not `prepend`. A `SKILL.md` opens with YAML frontmatter, and that
+frontmatter is what registers the skill's name and description; text above it would leave Claude
+Code loading a skill it cannot name, so the ON arm would receive nothing *and still produce a full
+set of rows*. `prepend` therefore refuses a file that starts with `---`.
 
 Ops are `prepend`, `append` and `replace_once`; text comes from `text_file` (relative to the
 variant dir) or inline `text`, exactly one of the two. The guard rails all exist because a
@@ -68,6 +75,20 @@ half-applied edit is worse than a failed run — it still produces rows:
   a file `SKILL.md` never references is a file the agent never reads — the edit would appear to
   apply and change nothing.
 * An overlay that applies zero ops exits, rather than recording itself as a treatment.
+* `tests/test_skill_apparatus.py` re-applies **every** shipped variant against the installed skill
+  on each run, and checks that the frontmatter survives, that the tree actually changed, and that
+  the `skill_marker` each task keys on is still in the text — a recipe that quietly stopped
+  applying would otherwise be recorded as a treatment.
+
+## The variants that exist
+
+| Variant | Hypothesis |
+|---|---|
+| `docx-v2` | the docx rules are stated only *inside* docx-js snippets, so on the python-docx path the model never applies them. Hoists page size, margins, Arial 12pt body, black headings, native numbering and absolute table widths to the top as properties of the **document**, in the shape of the xlsx skill — the one skill that measured as effective. |
+| `pptx-v2` | two changes: state the two scored rules up front, and **bound the QA loop** — "⚠️ USE SUBAGENTS" (no subagent exists here, and one would be a `subagent_invoked` confound) and the open-ended "repeat until a full pass reveals no new issues" become a single render-and-check cycle. That makes *what the QA wording costs* a result about skill authoring rather than about a model. |
+
+Both restate rules the installed skill already contains; neither adds a rule of ours. That is the
+line a variant must not cross, or `as-installed` vs `v2` stops being a presentation experiment.
 
 Get the `base` digest with:
 

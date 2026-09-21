@@ -313,3 +313,54 @@ def test_every_declared_node_package_is_tracked():
             assert name in harness.NODE_PKGS_TRACKED, (
                 f"{d.name} depends on Node package {name!r}, which no row records -- add it "
                 f"to harness.NODE_PKGS_TRACKED")
+
+
+def test_prepend_above_yaml_frontmatter_is_refused(tmp_path, monkeypatch):
+    """The frontmatter is what registers a skill's name and description. Text above it leaves
+    Claude Code loading a skill it cannot name, so the ON arm would receive NOTHING -- and it
+    would still produce a full set of rows, which is the failure mode that matters."""
+    install(tmp_path, monkeypatch, {"s/SKILL.md": "---\nname: s\n---\n\n# S\n"}, {"s-v2": {
+        "overlay.json": json.dumps({"ops": [{"file": "SKILL.md", "op": "prepend",
+                                             "text": "# Requirements\n"}]})}})
+    with pytest.raises(SystemExit, match="frontmatter"):
+        harness.assemble_skill("s", tmp_path / "dest", variant="v2")
+
+
+def _task_markers(skill):
+    out = set()
+    for d in sorted((ROOT / "tasks").iterdir()):
+        meta = d / "meta.json"
+        if not meta.is_file():
+            continue
+        m = json.loads(meta.read_text())
+        if m.get("skill") == skill and m.get("skill_marker"):
+            out.add(m["skill_marker"])
+    return out
+
+
+@pytest.mark.parametrize("vdir", sorted(p.name for p in (ROOT / "skills").iterdir()
+                                        if (p / "overlay.json").is_file()))
+def test_every_shipped_variant_applies_cleanly(tmp_path, vdir):
+    """A recipe is apparatus too. It is authored against upstream bytes it cannot see in the
+    repo, so "does it still apply?" has to be a test rather than a thing someone remembers to
+    re-check -- and a variant that silently stopped applying would be scored as a treatment.
+    """
+    skill, variant = vdir.rsplit("-", 1)
+    src = harness.SKILLS_ROOT / skill
+    if not src.is_dir():
+        pytest.skip(f"{skill} skill not installed")
+    dest = tmp_path / vdir / "skills" / skill
+    applied = harness.assemble_skill(skill, dest, variant=variant)
+    assert applied, f"{vdir} applied no ops"
+    text = (dest / "SKILL.md").read_text()
+    assert text.startswith("---\n") and "\nname: " in text[:200], (
+        f"{vdir} damaged the frontmatter, which is what registers the skill")
+    assert harness.skill_tree_sha(dest) != harness.skill_tree_sha(src), (
+        f"{vdir} produced a tree identical to the installed skill: it records itself as a "
+        f"treatment while changing nothing")
+    # The marker is how a row proves the skill reached the wire. An op that removed the line a
+    # task keys on would turn every ON repetition into "expected_skill_not_on_wire".
+    for marker in _task_markers(skill):
+        assert marker in text, (
+            f"{vdir} removed the wire marker {marker!r} that a task keys on -- every ON "
+            f"repetition of that task would be flagged expected_skill_not_on_wire")

@@ -1,0 +1,14 @@
+{
+  "description": "Hypothesis: the docx rules are stated only INSIDE docx-js snippets, so on the python-docx path the model never applies them. Hoist them to the top as properties of the document, in the shape of the xlsx skill -- which is the skill that measured as effective.",
+  "base": {
+    "SKILL.md": "cfbabd72b1aec7dfaad988fb6e5e16b27dc744b9a00cae15db9045e95f53903e"
+  },
+  "ops": [
+    {
+      "file": "SKILL.md",
+      "op": "replace_once",
+      "find": "# DOCX creation, editing, and analysis",
+      "text_file": "requirements.md"
+    }
+  ]
+}

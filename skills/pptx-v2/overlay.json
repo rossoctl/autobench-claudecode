@@ -1,0 +1,26 @@
+{
+  "description": "Two changes, each with its own hypothesis: (1) state the two scored rules up front as output requirements instead of leaving them in a bullet list halfway down, and (2) bound the QA loop -- replace \"USE SUBAGENTS\" (no subagent exists here, and one would be a confound) and the open-ended \"repeat until a full pass reveals no new issues\" with a single render-and-check cycle. What the QA wording COSTS is then a measurable result about skill authoring.",
+  "base": {
+    "SKILL.md": "e5b0df918cbe9d62508b3cf808d73899633f82fc19f6258a25ef9f0de7e62125"
+  },
+  "ops": [
+    {
+      "file": "SKILL.md",
+      "op": "replace_once",
+      "find": "# PPTX Skill",
+      "text_file": "requirements.md"
+    },
+    {
+      "file": "SKILL.md",
+      "op": "replace_once",
+      "find": "**⚠️ USE SUBAGENTS** — even for 2-3 slides. You've been staring at the code and will see what you expect, not what's there. Subagents have fresh eyes.",
+      "text_file": "visual-qa.md"
+    },
+    {
+      "file": "SKILL.md",
+      "op": "replace_once",
+      "find": "5. Repeat until a full pass reveals no new issues",
+      "text_file": "verification.md"
+    }
+  ]
+}
