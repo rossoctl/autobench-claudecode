@@ -278,7 +278,8 @@ def cmd_doctor(a):
 
 def cmd_tasks(a):
     root = ROOT / ("tasks-retired" if a.retired else "tasks")
-    print(f"{'task':26} {'mode':10} {'skill':8} {'verdict':8} {'arms':16} workspace")
+    last = "why it was discarded" if a.retired else "workspace"
+    print(f"{'task':26} {'mode':10} {'skill':8} {'verdict':8} {'arms':16} {last}")
     for d in sorted(root.iterdir()):
         if not (d / "prompt.md").exists():
             continue
@@ -292,8 +293,16 @@ def cmd_tasks(a):
         else:
             vd = "none"
         arms = "select" if mode == "selection" else ("on,off" if meta.get("skill") else "on")
-        files = sorted(p.name for p in (d / "workspace").iterdir() if p.is_file())
-        print(f"{d.name:26} {mode:10} {skill:8} {vd:8} {arms:16} {', '.join(files) or '-'}")
+        if a.retired:
+            # The verdict on the task, not on the model -- "a discarded task is a result", so
+            # the reason belongs in the listing rather than one file-open away.
+            dm = d / "DISCARDED.md"
+            head = dm.read_text().split("\n\n")[0].replace("\n", " ") if dm.exists() else ""
+            tail = head[:76] or "<no DISCARDED.md>"
+        else:
+            tail = ", ".join(sorted(p.name for p in (d / "workspace").iterdir()
+                                   if p.is_file())) or "-"
+        print(f"{d.name:26} {mode:10} {skill:8} {vd:8} {arms:16} {tail}")
     print("\nverdict: hidden = installed after the agent exits (compliance; the test is the")
     print("answer key) · visible = the tests ARE the spec · none = scored from the transcript.")
     if not a.retired:
