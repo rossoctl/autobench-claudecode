@@ -114,7 +114,7 @@ Measured across 22 tasks and three skills:
 |---|---|---|
 | `xlsx` | investment-banking colour coding (blue = hardcoded input) | **discriminates** 0/3 → 3/3 |
 | `xlsx` | professional font, no formula errors | **discriminates** 0/3 → 3/3 |
-| `docx` | Arial 12pt body, black heading text | **0/6 unaided** — the model writes Arial at 11pt and headings in `1A1A1A` or `0057FF` |
+| `docx` | Arial 12pt body, black heading text | **1/6 unaided** — Arial every time, but 11pt in 4 of 6 and headings in `1A1A1A`/`0057FF` in 3 of 6 |
 | `pptx` | no accent lines under titles | **1/3 unaided** — it draws 0.03in bars under titles unprompted |
 | `pptx` | dark title + closing slides, light content ("sandwich") | **0/3 unaided** — all five slides came out `#0D1B2A`, three times out of three |
 | `docx` | DXA table widths, with docx-js forced | **1/3 unaided** — `w:type="pct"` in 2 of 3 |

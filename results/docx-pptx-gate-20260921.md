@@ -1,6 +1,7 @@
 # docx / pptx candidate gate — OFF arm only, 2026-09-21
 
-**Model:** `claude-sonnet-4-6` · **Arm:** off (no skill) · **Repetitions:** 3 per task ·
+**Model:** `claude-sonnet-4-6` · **Arm:** off (no skill) · **Repetitions:** 3 per task, and 6 for
+`docx-brand-arial-black`, whose first three were re-run after its verdict was corrected ·
 **Skills:** `as-installed`, at the `skills/MANIFEST.json` digests · **Rows:**
 `out/modelskill/*.ndjson` (outside `profile.RUN_DIRS`, so none of this can join the published
 grid) · **Spend:** **$2.72 over 21 repetitions** (plan estimated ~$1.60, worst case ~$4)
@@ -13,7 +14,7 @@ at any number of repetitions.
 
 | task | OFF pass | fails on | outcome |
 |---|---|---|---|
-| `docx-brand-arial-black` | **0/3** | the rules: 11pt body 3/3, non-black headings 2/3 | **keep** |
+| `docx-brand-arial-black` | **0/3** (1/6 counting the re-scored first batch) | the rules: 11pt body, non-black headings | **keep** |
 | `pptx-dark-sandwich` | **0/3** | the rule: all five slides dark, `#0D1B2A`, 3/3 | **keep** |
 | `docxjs-table-dxa` | 1/3 | the rule: `<w:tblW w:type="pct"/>` 2/3 | **keep**, marginal |
 | `pptx-no-accent-lines` | 1/3 | the rule: 0.03–0.04in bars under titles 2/3 | **keep**, marginal |
@@ -37,9 +38,11 @@ Worth recording, because each of these is a fact about the model and not about a
 * **Unstyled documents.** Every docx repetition wrote every paragraph as `Normal` and made
   headings with direct formatting (bold Arial Black, 20–24pt). This broke the first version of
   the `docx-brand-arial-black` guard; see commit "Find docx headings by shape".
-* **Arial, but 11pt.** The model reaches for Arial unprompted and sizes the body at 11pt — the
-  Word default — in 6 of 6 repetitions. Heading colour was `000000` in three, `1A1A1A` in two
-  and `0057FF` in one.
+* **Arial, but usually 11pt.** The model reaches for Arial unprompted every time and sizes the
+  body at 11pt — the Word default — in 4 of 6 repetitions. Heading colour was `000000` in three
+  repetitions, `1A1A1A` in three, and `0057FF` alongside `1A1A1A` in one of those. Exactly one of
+  the six satisfied both rules, which is the headroom: the model's Arial habit is reliable, its
+  12pt-and-black habit is not.
 * **Page size follows the audience, not the library.** With docx-js forced (A4 by default), all
   three repetitions set US Letter, one of them citing "our US offices … will be printed" from
   the prompt.
