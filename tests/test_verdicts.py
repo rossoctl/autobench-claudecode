@@ -51,9 +51,16 @@ def run_verdict(task_id, artifact, tmp_path):
 
     The verdict resolves its artifact relative to its OWN file, so it has to be copied beside
     the fixture rather than pointed at it -- the same arrangement `install_verdict` makes.
+
+    Retired tasks are looked up too, on purpose: "the model passed it unaided" is only a
+    result if the verdict COULD have failed, so a `DISCARDED.md` that rests on a calibration
+    keeps that calibration running.
     """
     d = tmp_path / f"verdict-{task_id}"
-    shutil.copytree(ROOT / "tasks" / task_id / "verdict", d)
+    src = ROOT / "tasks" / task_id / "verdict"
+    if not src.is_dir():
+        src = ROOT / "tasks-retired" / task_id / "verdict"
+    shutil.copytree(src, d)
     shutil.copy2(artifact, d / artifact.name)
     r = subprocess.run([harness.VENV_PY, "-m", "pytest", "-q"], cwd=d,
                        capture_output=True, text=True, timeout=300)
@@ -242,6 +249,46 @@ def test_docx_brand_arial_black_discriminates_on_python_docx(tmp_path):
     rc, out = run_verdict("docx-brand-arial-black",
                           brand_with_python_docx(tmp_path, True), tmp_path / "b")
     assert rc == 0, f"verdict fails a compliant python-docx document:\n{out[-800:]}"
+
+
+def brand_direct_formatting(tmp_path, kind):
+    """The shape every unaided run actually produced (3/3, sonnet-4-6, 2026-09-21): no
+    paragraph styles at all, headings made with bold + a larger font on the run.
+
+    This is the calibration that the first version of the verdict was missing. It keyed on
+    style names, found none, and failed all three documents on the structure guard -- so a
+    0/3 said "the model writes unstyled documents", not "the model breaks the rule".
+    """
+    from docx import Document
+    from docx.shared import Pt, RGBColor
+    d = Document()
+    body_pt = 11 if kind == "body-11pt" else 12
+    head_hex = (0x1A, 0x1A, 0x1A) if kind == "offblack" else (0, 0, 0)
+    for text, style in BRAND_TEXT:
+        run = d.add_paragraph().add_run(text)
+        run.font.name = "Arial"
+        if style:                                     # a heading, by shape only
+            run.font.bold = True
+            run.font.size = Pt(20 if style == "Title" else 14)
+            run.font.color.rgb = RGBColor(*head_hex)
+        else:
+            run.font.size = Pt(body_pt)
+    out = tmp_path / f"direct-{kind}"
+    out.mkdir(parents=True, exist_ok=True)
+    p = out / "retention.docx"
+    d.save(p)
+    return p
+
+
+@pytest.mark.parametrize("kind,should_pass", [
+    ("compliant", True),        # unstyled headings must still BE headings
+    ("body-11pt", False),       # the body rule, on the document shape runs really produce
+    ("offblack", False)])       # 1A1A1A: observed, and deliberately not black enough
+def test_docx_brand_arial_black_scores_unstyled_documents(tmp_path, kind, should_pass):
+    rc, out = run_verdict("docx-brand-arial-black",
+                          brand_direct_formatting(tmp_path, kind), tmp_path / kind)
+    assert (rc == 0) is should_pass, (
+        f"direct-formatting {kind}: expected {'pass' if should_pass else 'fail'}\n{out[-900:]}")
 
 
 BRAND_BODY = ('new Paragraph({ heading: HeadingLevel.TITLE, text: "Q3 Retention" }), '

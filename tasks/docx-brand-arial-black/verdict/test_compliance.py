@@ -18,7 +18,16 @@ MEASURED DEFAULTS, both non-compliant, which is what makes the task a discrimina
   docx-js      <w:docDefaults><w:rPrDefault/></w:docDefaults> and no theme part at all, so
                nothing declares a default font and the effective face is whatever Word
                happens to use -- which is not Arial either
+
+HEADINGS ARE FOUND BY SHAPE, NOT ONLY BY STYLE. The 2026-09-21 OFF pre-screen settled this
+empirically: 3 of 3 unaided runs wrote EVERY paragraph as Normal and built the hierarchy with
+direct formatting (bold Arial Black at 20-24pt over Arial body text). Keyed on style names
+alone, the structure guard read those documents as "no headings at all" and failed them for a
+reason that has nothing to do with either rule -- the pptx-size-contrast defect again. So a
+heading is a styled heading OR a short paragraph set larger than the size most of the
+document's text is in.
 """
+import collections
 import pathlib
 import xml.etree.ElementTree as ET
 import zipfile
@@ -30,6 +39,7 @@ BODY_FONT = "arial"
 BODY_HALF_POINTS = 24          # 12pt, as the skill's own snippet writes it
 BLACK = {"000000", "auto"}     # w:val="auto" IS automatic-black in Word
 HEADING_PREFIXES = ("heading", "title", "subtitle")
+MAX_HEADING_CHARS = 120        # past this it is a paragraph that happens to be large
 
 
 def _zip():
@@ -171,10 +181,6 @@ def _paragraphs(z):
     return out
 
 
-def _is_heading(style_name):
-    return str(style_name).strip().lower().startswith(HEADING_PREFIXES)
-
-
 def _effective(run_rprs, chain, theme, what):
     """Run-level first, then the paragraph/style/docDefaults chain -- as Word resolves it."""
     rprs = run_rprs + chain
@@ -183,16 +189,56 @@ def _effective(run_rprs, chain, theme, what):
             "color": lambda: _color(rprs)}[what]()
 
 
+def _para_size(para):
+    _, _, runs, chain, theme = para
+    return _effective(runs[:1], chain, theme, "size")
+
+
+def _body_half_points(paras):
+    """The size most of the document's TEXT is set in -- its body size, whatever that is.
+
+    Weighted by characters rather than by paragraph count, because a document has more body
+    prose than headings but often more heading paragraphs than body ones. Ties go to the
+    smaller size: body text is not the large end of a hierarchy.
+    """
+    weight = collections.Counter()
+    for para in paras:
+        size = _para_size(para)
+        if size:
+            weight[size] += len(para[1])
+    if not weight:
+        return None
+    heaviest = max(weight.values())
+    return min(size for size, chars in weight.items() if chars == heaviest)
+
+
+def _split(paras):
+    """(headings, body). Styled headings count; so does a short, larger-than-body paragraph,
+    which is how an unaided run writes them."""
+    body_size = _body_half_points(paras)
+    headings, body = [], []
+    for para in paras:
+        name, text = para[0], para[1]
+        size = _para_size(para)
+        styled = str(name).strip().lower().startswith(HEADING_PREFIXES)
+        larger = (size is not None and body_size is not None and size > body_size
+                  and len(text.strip()) <= MAX_HEADING_CHARS)
+        (headings if styled or larger else body).append(para)
+    return headings, body
+
+
 # ------------------------------------------------------------------ structure guard
 
 def test_document_has_a_title_and_headings():
-    """Without this the two rules below could pass vacuously on a document with no headings at
-    all -- a verdict that passes an empty artifact measures nothing."""
+    """Without this the two rules below could pass vacuously: no headings makes the colour rule
+    empty, no body text makes the font rule empty, and both pass an artifact measuring nothing."""
     paras = _paragraphs(_zip())
-    headings = [t for n, t, *_ in paras if _is_heading(n)]
+    headings, body = _split(paras)
     assert len(headings) >= 2, (
-        f"expected a title and at least one section heading; styled headings found: {headings} "
-        f"(styles seen: {sorted({n for n, *_ in paras})})")
+        f"expected a title and at least one section heading; found {[t for _, t, *_ in headings]} "
+        f"(body size {_body_half_points(paras)} half-points, "
+        f"paragraphs {[(n, _para_size(p), p[1][:24]) for p in paras for n in [p[0]]]})")
+    assert body, f"no body text: every paragraph reads as a heading ({len(headings)} of them)"
     blob = " ".join(t.lower() for _, t, *_ in paras)
     for token in ("retention", "q3"):
         assert token in blob, f"the brief's content is missing: {token!r} not in the document"
@@ -203,9 +249,7 @@ def test_document_has_a_title_and_headings():
 def test_body_text_is_arial_12pt():
     """Skill rule: "Use Arial as the default font (universally supported)", 12pt."""
     bad = []
-    for name, text, runs, chain, theme in _paragraphs(_zip()):
-        if _is_heading(name):
-            continue
+    for name, text, runs, chain, theme in _split(_paragraphs(_zip()))[1]:
         for run in (runs or [None]):
             rr = [run] if run is not None else []
             font = _effective(rr, chain, theme, "font")
@@ -220,11 +264,14 @@ def test_body_text_is_arial_12pt():
 def test_heading_text_is_black():
     """Skill rule: "Keep titles black for readability." Resolved, so an inherited built-in
     heading colour (python-docx Heading 1 = 365F91) counts as a violation, which is the point:
-    black is not what either library gives you by default."""
+    black is not what either library gives you by default.
+
+    Black is read LITERALLY -- 000000 or automatic. One unaided run set every heading to
+    1A1A1A, which a viewer would call black; it is scored as a violation because the rule this
+    task measures is a brand rule, and a brand rule that accepts near-black accepts anything.
+    """
     bad = []
-    for name, text, runs, chain, theme in _paragraphs(_zip()):
-        if not _is_heading(name):
-            continue
+    for name, text, runs, chain, theme in _split(_paragraphs(_zip()))[0]:
         for run in (runs or [None]):
             rr = [run] if run is not None else []
             col = _effective(rr, chain, theme, "color")
