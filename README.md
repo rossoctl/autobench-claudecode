@@ -9,7 +9,7 @@ it is what separates a benchmark from a load generator.
 
 For the mechanics — the data path through a repetition, what supplies a task's inputs, how
 the verdict is scored, the invariants, and how to add a task — see
-[`docs/DEVELOPER-GUIDE.md`](docs/DEVELOPER-GUIDE.md).
+[`docs/DEVELOPER_GUIDE.md`](docs/DEVELOPER_GUIDE.md).
 
 ## What measures what
 
