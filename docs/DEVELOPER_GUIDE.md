@@ -420,20 +420,20 @@ developer-facing entry points and are documented in §10.
 
 ## 5. The data path, end to end
 
-One call to `run_rep` (`harness.py:328`), in order. The order is load-bearing in three
+One call to `run_rep` (`harness.py:362`), in order. The order is load-bearing in three
 places, each flagged below.
 
-1. **`fresh_ws`** (`harness.py:253`) copies `tasks/<id>/workspace/` to a new temp dir with
+1. **`fresh_ws`** (`harness.py:264`) copies `tasks/<id>/workspace/` to a new temp dir with
    `copytree`, ignoring `__pycache__`, `.pytest_cache`, `*.pyc`, `.venv`, `venv`.
 2. **`test_hashes`** takes a sha256 of every `test_*.py` now present. ⚠️ **Order matters:**
    this snapshot must precede step 8.
 3. **Baseline** — for a task with in-workspace tests, `pytest` must *fail* here. A suite
    that already passes means there is nothing to measure (`baseline_ok`). Hidden-verdict
    and selection tasks have no in-workspace baseline and are exempt.
-4. **Child environment** (`child_env`, plus the extras at `harness.py:345`) — proxy vars,
+4. **Child environment** (`child_env`, plus the extras at `harness.py:379`) — proxy vars,
    the Cortex CA for Node, the curated `CLAUDE_CONFIG_DIR`, bundled skills off, the venv
    on `PATH`.
-5. **Arm shaping** (`harness.py:357`) — prefix the prompt with `/<skill>` on the `on` arm,
+5. **Arm shaping** (`harness.py:391`) — prefix the prompt with `/<skill>` on the `on` arm,
    add `Skill` to the tool allow-list on `on` and `select`, leave both alone on `off`.
 6. **Invoke** `claude -p` with `cwd=ws`, wall-clocked as `[t0, t1]`, then `sleep(4)` so the
    final SSE event lands on disk.
@@ -454,13 +454,13 @@ places, each flagged below.
 
 Two context managers wrap all of this:
 
-- **`RunLock`** (`harness.py:91`) serializes harness runs on the machine, waiting up to two
+- **`RunLock`** (`harness.py:102`) serializes harness runs on the machine, waiting up to two
   hours. Cortex events are correlated by *time window* against a single shared proxy, so
   concurrent runs interleave — a smoke test once absorbed a sweep's events and was flagged
   `multiple_models`. The detector caught it; the lock makes the overlap impossible instead
   of merely detectable. **Never run two harness processes at once.** Interactive Claude Code
   on the same machine is safe because it has no `HTTPS_PROXY` and stays out of the window.
-- **`Capture`** (`harness.py:132`) owns the SSE tail. Cortex's session store is in-memory
+- **`Capture`** (`harness.py:143`) owns the SSE tail. Cortex's session store is in-memory
   with a 30-minute TTL, so the file on disk is the only durable record. A dead capture
   yields zero events, which is indistinguishable from "the proxy saw nothing" — so the
   harness starts it, proves it is producing, and stops it. An existing capture is adopted
@@ -480,7 +480,7 @@ tasks/<task-id>/
   verdict/           optional   HIDDEN tests, installed only after the agent exits
 ```
 
-Parsed by `load_task` (`harness.py:211`).
+Parsed by `load_task` (`harness.py:222`).
 
 ### 6.2 What the workspace contains — and usually does not
 
@@ -586,7 +586,7 @@ pytest.
 
 ### 6.6 Skill isolation
 
-`main` builds a curated `CLAUDE_CONFIG_DIR` (`harness.py:557`) containing a `skills/`
+`main` builds a curated `CLAUDE_CONFIG_DIR` (`harness.py:593`) containing a `skills/`
 directory holding **exactly the task's skill, or nothing at all**, copied from
 `~/.claude/skills/<name>`, with `CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1`.
 
@@ -638,7 +638,7 @@ others can be fooled.
 
 ### 7.1 Stream 1 — artifact correctness, by pytest
 
-`pytest -q` runs in the workspace under the repo venv (`pytest_run`, `harness.py:270`),
+`pytest -q` runs in the workspace under the repo venv (`pytest_run`, `harness.py:281`),
 after the agent has exited.
 
 **What the evaluator sees is only the artifact.** It opens the single `.xlsx` the agent left
@@ -689,7 +689,7 @@ Editing the tests green fails the repetition. Green pytest alone is not a pass.
 
 ### 7.3 Stream 3 — attribution, from the transcript and the wire
 
-`analyse_transcript` (`harness.py:279`) walks the stream-json and collects `tool_use`
+`analyse_transcript` (`harness.py:290`) walks the stream-json and collects `tool_use`
 blocks: `tools`, `skills`, `skill_names`, `subagents`, `background`, `assistant_turns`.
 
 The transcript has a blind spot that the wire covers. **An explicit `/skill-name` is
@@ -718,7 +718,7 @@ one, so a selection benchmark that tests only true positives is half a benchmark
 ### 7.5 Confounds — void, not failed
 
 A repetition can be **invalid** rather than **failed**, and conflating the two biases every
-median. Detectors (`harness.py:456` onward):
+median. Detectors (`harness.py:490` onward):
 
 | Confound | Meaning |
 |---|---|
@@ -752,7 +752,7 @@ gate and live in `tasks-retired/`, each with a `DISCARDED.md`.
 ## 8. The measurement side
 
 Tokens, `llm_calls`, and `skill_on_wire` come from correlating Cortex SSE events by time
-window (`harness.py:412`) — nothing else in the row provides them. `tool_calls` and
+window (`harness.py:446`) — nothing else in the row provides them. `tool_calls` and
 `assistant_turns` come from the transcript and are proxy-independent.
 
 Cost is computed by `pricing.py`, never stored: `cost(model, uncached=, cache_read=,
