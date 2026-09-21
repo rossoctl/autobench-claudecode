@@ -45,7 +45,8 @@ means `../harness.py` from here, and commands are written to be run from the roo
    [confounds](#75-confounds--void-not-failed) ·
    [the OFF-arm gate](#76-the-gate-upstream-of-everything)
 8. [The measurement side](#8-the-measurement-side)
-9. [Adding a task](#9-adding-a-task)
+9. [Adding a task](#9-adding-a-task) — [why a task dies](#91-why-a-task-dies) ·
+   [editing the skill instead](#92-editing-the-skill-instead-of-the-task)
 10. [Command reference](#10-command-reference)
 11. [Membership and the freeze workflow](#11-membership-and-the-freeze-workflow)
 12. [The NDJSON row](#12-the-ndjson-row)
@@ -403,8 +404,8 @@ autobench-claudecode-cli compare --task <id> --models ... --arms on,off --reps 5
 
 Step 2 is the whole study in miniature. The convention under test must be **arbitrary, not
 good practice** — good practice is what the model already does, so the skill has nothing to
-show. Nine of the first eleven tasks died at this gate, and they are in `tasks-retired/` with
-the reason.
+show. Eleven of the twenty-two tasks written so far died at this gate, and they are in
+`tasks-retired/` with the reason.
 
 ### 3.9 Full syntax
 
@@ -448,10 +449,11 @@ developer-facing entry points and are documented in §10.
 | `pricing.py` | the internal LiteLLM rate card, hand-maintained on purpose |
 | `lib_child.py` | builds the sanitized child environment |
 | `.python-version`, `requirements.lock` | the pinned apparatus: 3.14.3 and the verdict libraries that scored the grid (§2.2) |
-| `tasks/` | 7 active tasks |
-| `tasks-retired/` | 9 discarded tasks, each with a `DISCARDED.md` stating why. **A discarded task is a result** |
+| `tasks/` | 11 active tasks — 2 `xlsx`, 1 `docx`, 2 `pptx`, 1 no-skill control, 4 selection, plus `docxjs-table-dxa` |
+| `tasks-retired/` | 11 discarded tasks, each with a `DISCARDED.md` stating why. **A discarded task is a result** |
+| `skills/` | the skill as pinned apparatus: `MANIFEST.json` (digests only) and the `<skill>-<variant>/overlay.json` edit recipes. Contains no skill prose — see `skills/README.md` |
 | `tools/` | task generators plus the controls and analysis tools |
-| `tests/` | 59 tests guarding the confound detector, workspace setup, the result-event whitelist, the apparatus pins and the CLI's reporting |
+| `tests/` | 106 tests guarding the confound detector, workspace setup, the result-event whitelist, the apparatus pins, every hidden verdict's calibration, and the CLI's reporting |
 | `results/` | `EVALUATION.md`, the frozen manifest, the cost-profile artifacts, the generated deck |
 | `out/` | **gitignored.** Per-run NDJSON and the raw SSE capture, which contains full prompts |
 | `out/modelskill/` | where the CLI writes by default — outside `profile.RUN_DIRS`, so consumer runs cannot join the published grid |
@@ -460,47 +462,55 @@ developer-facing entry points and are documented in §10.
 
 ## 5. The data path, end to end
 
-One call to `run_rep` (`harness.py:362`), in order. The order is load-bearing in three
-places, each flagged below.
+One call to `run_rep` in `harness.py`, in order. The order is load-bearing in three
+places, each flagged below. Everything here is cited **by symbol**, never by line number:
+this file has already gone stale twice because an insertion near the top of `harness.py`
+moved every number below it while the prose stayed plausible.
 
-1. **`fresh_ws`** (`harness.py:264`) copies `tasks/<id>/workspace/` to a new temp dir with
+1. **`fresh_ws`** copies `tasks/<id>/workspace/` to a new temp dir with
    `copytree`, ignoring `__pycache__`, `.pytest_cache`, `*.pyc`, `.venv`, `venv`.
-2. **`test_hashes`** takes a sha256 of every `test_*.py` now present. ⚠️ **Order matters:**
-   this snapshot must precede step 8.
-3. **Baseline** — for a task with in-workspace tests, `pytest` must *fail* here. A suite
+2. **`link_node_modules`** symlinks each package in `meta.json`'s `node_modules` from the
+   host's global `npm root -g` into `<ws>/node_modules/`. A symlink rather than `NODE_PATH`
+   because `NODE_PATH` is CommonJS-only, and pre-installed rather than left to the agent
+   because `npm install` **cannot work through Cortex** — the registry response trips the
+   proxy with `502 … response body too large`. A missing package exits the run rather than
+   letting the agent silently fall back to a different library.
+3. **`test_hashes`** takes a sha256 of every `test_*.py` now present. ⚠️ **Order matters:**
+   this snapshot must precede step 9.
+4. **Baseline** — for a task with in-workspace tests, `pytest` must *fail* here. A suite
    that already passes means there is nothing to measure (`baseline_ok`). Hidden-verdict
    and selection tasks have no in-workspace baseline and are exempt.
-4. **Child environment** (`child_env`, plus the extras at `harness.py:379`) — proxy vars,
+5. **Child environment** (`child_env`, plus the per-arm extras in `run_rep`) — proxy vars,
    the Cortex CA for Node, the curated `CLAUDE_CONFIG_DIR`, bundled skills off, the venv
    on `PATH`.
-5. **Arm shaping** (`harness.py:391`) — prefix the prompt with `/<skill>` on the `on` arm,
+6. **Arm shaping** — prefix the prompt with `/<skill>` on the `on` arm,
    add `Skill` to the tool allow-list on `on` and `select`, leave both alone on `off`.
-6. **Invoke** `claude -p` with `cwd=ws`, wall-clocked as `[t0, t1]`, then `sleep(4)` so the
+7. **Invoke** `claude -p` with `cwd=ws`, wall-clocked as `[t0, t1]`, then `sleep(4)` so the
    final SSE event lands on disk.
-7. **`analyse_transcript`** parses the stream-json to recover which tools, skills,
+8. **`analyse_transcript`** parses the stream-json to recover which tools, skills,
    subagents, and background tools actually ran.
-8. **Tamper check** — re-hash `test_*.py` and compare against step 2, *while the workspace
-   still holds only the agent's own files*. ⚠️ Taking this after step 9 would compare `{}`
+9. **Tamper check** — re-hash `test_*.py` and compare against step 3, *while the workspace
+   still holds only the agent's own files*. ⚠️ Taking this after step 10 would compare `{}`
    against `{test_compliance.py}` and mark every hidden-verdict task as tampered, so no
    such task could ever pass no matter how green pytest was.
-9. **Install the hidden verdict** — `copytree(task["verdict"], ws)` with the same ignore
+10. **Install the hidden verdict** — `copytree(task["verdict"], ws)` with the same ignore
    patterns. ⚠️ It must be `copytree`, not per-entry `copy2`: running the verdict tests by
    hand leaves a `__pycache__/` inside `verdict/`, and a flat copy dies on it with
    `IsADirectoryError`. That killed a 25-repetition opus run at repetition 1.
-10. **Score** — `pytest -q` again; `passed = (rc == 0) and tests_untouched`.
-11. **Correlate Cortex** — events in `[t0, t1]` for the target host give tokens and
+11. **Score** — `pytest -q` again; `passed = (rc == 0) and tests_untouched`.
+12. **Correlate Cortex** — events in `[t0, t1]` for the target host give tokens and
     `llm_calls`; request-phase messages give `skill_on_wire`.
-12. **Detect confounds**, then emit the row.
+13. **Detect confounds**, then emit the row.
 
 Two context managers wrap all of this:
 
-- **`RunLock`** (`harness.py:102`) serializes harness runs on the machine, waiting up to two
+- **`RunLock`** serializes harness runs on the machine, waiting up to two
   hours. Cortex events are correlated by *time window* against a single shared proxy, so
   concurrent runs interleave — a smoke test once absorbed a sweep's events and was flagged
   `multiple_models`. The detector caught it; the lock makes the overlap impossible instead
   of merely detectable. **Never run two harness processes at once.** Interactive Claude Code
   on the same machine is safe because it has no `HTTPS_PROXY` and stays out of the window.
-- **`Capture`** (`harness.py:143`) owns the SSE tail. Cortex's session store is in-memory
+- **`Capture`** owns the SSE tail. Cortex's session store is in-memory
   with a 30-minute TTL, so the file on disk is the only durable record. A dead capture
   yields zero events, which is indistinguishable from "the proxy saw nothing" — so the
   harness starts it, proves it is producing, and stops it. An existing capture is adopted
@@ -520,7 +530,7 @@ tasks/<task-id>/
   verdict/           optional   HIDDEN tests, installed only after the agent exits
 ```
 
-Parsed by `load_task` (`harness.py:222`).
+Parsed by `load_task`.
 
 ### 6.2 What the workspace contains — and usually does not
 
@@ -626,7 +636,7 @@ pytest.
 
 ### 6.6 Skill isolation
 
-`main` builds a curated `CLAUDE_CONFIG_DIR` (`harness.py:593`) containing a `skills/`
+`main` builds a curated `CLAUDE_CONFIG_DIR`  containing a `skills/`
 directory holding **exactly the task's skill, or nothing at all**, copied from
 `~/.claude/skills/<name>`, with `CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1`.
 
@@ -678,7 +688,7 @@ others can be fooled.
 
 ### 7.1 Stream 1 — artifact correctness, by pytest
 
-`pytest -q` runs in the workspace under the repo venv (`pytest_run`, `harness.py:281`),
+`pytest -q` runs in the workspace under the repo venv (`pytest_run`),
 after the agent has exited.
 
 **What the evaluator sees is only the artifact.** It opens the single `.xlsx` the agent left
@@ -729,7 +739,7 @@ Editing the tests green fails the repetition. Green pytest alone is not a pass.
 
 ### 7.3 Stream 3 — attribution, from the transcript and the wire
 
-`analyse_transcript` (`harness.py:290`) walks the stream-json and collects `tool_use`
+`analyse_transcript` walks the stream-json and collects `tool_use`
 blocks: `tools`, `skills`, `skill_names`, `subagents`, `background`, `assistant_turns`.
 
 The transcript has a blind spot that the wire covers. **An explicit `/skill-name` is
@@ -758,7 +768,7 @@ one, so a selection benchmark that tests only true positives is half a benchmark
 ### 7.5 Confounds — void, not failed
 
 A repetition can be **invalid** rather than **failed**, and conflating the two biases every
-median. Detectors (`harness.py:490` onward):
+median. Detectors (in `result_fields` and `run_rep`):
 
 | Confound | Meaning |
 |---|---|
@@ -792,7 +802,7 @@ gate and live in `tasks-retired/`, each with a `DISCARDED.md`.
 ## 8. The measurement side
 
 Tokens, `llm_calls`, and `skill_on_wire` come from correlating Cortex SSE events by time
-window (`harness.py:446`) — nothing else in the row provides them. `tool_calls` and
+window — nothing else in the row provides them. `tool_calls` and
 `assistant_turns` come from the transcript and are proxy-independent.
 
 Cost is computed by `pricing.py`, never stored: `cost(model, uncached=, cache_read=,
@@ -827,25 +837,80 @@ total, so scaling a dollar figure by a token ratio is wrong. Call `pricing.cost(
    convention you intend to test (§6.4).
 2. **Choose the convention.** It must be **arbitrary, not good practice** — something a
    competent agent would not do by default. Good practice is what the model already does,
-   so the skill cannot show up. See `README.md` for the heuristic and the six tasks it
-   killed.
+   so the skill cannot show up. See `README.md` for the heuristic, §9.1 below for the five
+   ways a task dies, and `tasks-retired/*/DISCARDED.md` for the eleven that did.
 3. **Write the verdict tests.** Hidden in `verdict/` for compliance; in `workspace/` only
    when the tests *are* the spec. Assert mechanically checkable properties of the artifact.
    Fail loudly on a missing or ambiguous artifact rather than guessing.
-4. **Seed `workspace/`** with the minimum. Usually a `README.txt` saying where to put the
+4. **Calibrate the verdict** in `tests/test_verdicts.py`, before spending anything. Build two
+   artifacts with the library a real run would use and assert the verdict **fails the default
+   one and passes a compliant one**. Both halves, or a verdict that fails everything is
+   indistinguishable from a discriminating one. A coverage test refuses a new skill task with
+   no calibration, because "0/3" reads identically whether the model ignored the skill or the
+   test was broken — which is what happened to `pptx-size-contrast` for three paid
+   repetitions.
+5. **Seed `workspace/`** with the minimum. Usually a `README.txt` saying where to put the
    output — no starter artifact, or you pre-decide the thing you are testing.
-5. **Add `meta.json`** with `skill` and a `skill_marker` copied verbatim from the skill's
-   `SKILL.md`.
-6. **Pre-screen on the `off` arm**, at least 3 repetitions:
+6. **Add `meta.json`** with `skill` and a `skill_marker` copied verbatim from the skill's
+   `SKILL.md` — ASCII only, because the marker is matched against `json.dumps`'d wire messages
+   where an em dash has become `—`. Add `node_modules` for any Node library the task needs, and
+   `npm install -g` it on the host — `npm` **cannot reach the registry through Cortex**.
+7. **Pre-screen on the `off` arm**, at least 3 repetitions:
    ```bash
    python3 harness.py tasks/<id> --arm off --reps 3
    ```
    If it passes without the skill, retire it with a `DISCARDED.md`. This is the gate, not a
    formality.
-7. **Confirm the `on` arm** and check `skill_on_wire` is `true` in the row. If it is
+8. **Confirm the `on` arm** and check `skill_on_wire` is `true` in the row. If it is
    `false`, the treatment never happened and the contrast is meaningless.
-8. **Check the confounds** on both arms before believing any number.
-9. **Only then** add it to `profile.CELLS` and buy repetitions.
+9. **Check the confounds** on both arms before believing any number.
+10. **Only then** add it to `profile.CELLS` and buy repetitions.
+
+### 9.1 Why a task dies
+
+Eleven of the twenty-two tasks written so far are in `tasks-retired/`. They died of five distinct
+things, and only the first is about the rule being uninteresting:
+
+| Mode | What it looks like | Example |
+|---|---|---|
+| **The rule is good practice** | passes on the OFF arm | six of the eleven: `xlsx-fin-numfmt` and `xlsx-fin-assumption-refs` at 3/3 unaided, `pptx-size-contrast` (decks already run 58/34/16pt), `pptx-not-text-only` (the model already adds a chart), `docxjs-native-bullets` (3/3 even with docx-js forced), `docxjs-us-letter` (page size follows the audience, not the library default) |
+| **Path dependence** | the rule only bites on the library the skill recommends, and the model reaches for a different one | all three retired `docx-*`: every checkable docx rule corrects a **docx-js** footgun, and python-docx's defaults already satisfy them. Unaided, the model picks python-docx |
+| **Not robustly checkable** | the verdict needs a distinction the format does not carry | `pptx-body-left-aligned` — separating a centred title from centred body copy with no title placeholder; the shipped ≤24pt proxy measured noise |
+| **No headroom** | partial pass unaided, and then the ON arm is not better | `xlsx-fin-zeros-negs` — OFF 2/3 → ON 1/3. A skill arm below its control is measuring run-to-run variance, not a skill. Treat the pre-screen's *marginal* verdict as a warning, not a pass |
+| **The verdict was wrong** | the *instrument* failed, not the task | `pptx-size-contrast`: keyed on `slide.shapes.title`, which is `None` for blank-layout decks, so it failed a compliant deck and reported "the skill does not help". `docx-brand-arial-black` caught the same defect at the gate instead of after paying for it — its structure guard wanted styled headings, and unaided runs make headings with direct formatting |
+
+**Read the failing assertion, not the pass rate.** `docxjs-us-letter` scored 2/3 and looked
+marginal; the rule passed 3 of 3 and the single failure was its own structure guard demanding the
+string "all staff" from a memo addressed "To: All US Offices". A 2/3 taken at face value would
+have bought ON repetitions to measure nothing. A structure guard should check that the artifact
+*is* the briefed document — content words survive rephrasing, salutations do not.
+
+Path dependence has two fixes, and they answer different questions. **Force the library** in the
+prompt (`docxjs-*` say "our docs pipeline is Node") — that names the library, not the convention,
+so §6.4 holds. Or **find a rule that binds on both paths** (`docx-brand-arial-black`), which is
+the one that survives a model choosing either library.
+
+### 9.2 Editing the skill instead of the task
+
+A task tests whether a model follows a rule. The other experiment is whether the *skill text*
+gets the rule across — "the rule is stated only inside a code snippet" is a hypothesis about
+authoring, and it is testable:
+
+```bash
+python3 harness.py tasks/docx-brand-arial-black --arm on --skill-variant v2 --reps 3
+```
+
+`skills/<skill>-<variant>/overlay.json` is an **edit recipe** applied to the copy of the installed
+skill that the child gets — never to `~/.claude/skills`, which is the baseline behind everything
+in `results/` and the user's day-to-day Claude Code. `skills/README.md` is the full contract; the
+short version:
+
+- the recipe pins the upstream bytes it was written against, and a drifted `base` **exits** rather
+  than half-applying an edit (a half-applied edit still produces rows);
+- `--skill-variant` is refused on the OFF arm (nothing to overlay) and on selection tasks (which
+  skill fires *is* the measurement, and editing one candidate biases the choice silently);
+- a variant may only restate rules the skill already contains. Adding one of your own turns
+  `as-installed` vs `v2` from a presentation experiment into a different skill.
 
 ---
 
@@ -869,10 +934,11 @@ it. Cortex must be reachable either way — session API on `127.0.0.1:47601`, pr
 | `.venv/bin/python tools/cost_significance.py` | which cost gaps are established |
 | `.venv/bin/python tools/stability_probe.py --task <id>` | which cells reproduce across sessions |
 | `.venv/bin/python tools/make_summary_deck.py` | regenerate the deck |
-| `.venv/bin/python -m pytest -q` | 59 tests |
+| `.venv/bin/python -m pytest -q` | the test suite: rig invariants, apparatus, and every verdict's calibration |
+| `python3 tools/freeze_skills.py` | re-pin `skills/MANIFEST.json` after an upstream skill update |
 
 `harness.py` flags: `--reps`, `--out` (default `out/runs`), `--arm {on,off,select}`,
-`--model`.
+`--model`, `--skill-variant` (ON arm only, §9.2).
 
 Use `.venv/bin/python`, not `python3`, for anything needing `openpyxl` or `pptx`.
 
@@ -983,6 +1049,33 @@ and a user account.
 What measured them is recorded in §2.2 instead, recovered from the venv's creation time: 3.14.3,
 pytest 9.1.1, openpyxl 3.1.5, one apparatus throughout.
 
+**The treatment** — `skill_variant`, `skill_sha`, `skill_files`, `node_version`, `node_packages`
+
+The venv is what *measured* the row; the skill is what *was* measured, and on the ON arm it is
+the independent variable. `harness.skill_apparatus` digests the `skills/` tree **actually handed
+to the child**, so:
+
+- `skill_variant` is `"as-installed"` for a verbatim copy, the variant name when an edit recipe
+  was applied, and `null` when the dir is empty — which is the OFF arm. A name rather than `null`
+  for the default case, because `null` is indistinguishable from a row written before the field
+  existed.
+- `skill_sha` is one digest over sorted relative path + content, so it covers a rename as well as
+  an edit, and covers a selection task's four candidate skills in one field. `null`, not
+  `sha256("")`, when nothing was installed — a real hexdigest there would read as "some skill was
+  present".
+- `node_packages` is a **whitelist** (`harness.NODE_PKGS_TRACKED`), same rule as `EVENT_KEEP`: the
+  rest of a global `npm` install is the user's software inventory, not apparatus. It is in the row
+  because `docx@9.7.1` defaults a table to `w:type="pct"`, which is the exact property
+  `docxjs-table-dxa` asserts about — the library version is *inside* the measurement, not beside
+  it.
+
+Digests and versions only: the skills are third-party and licensed against copies leaving the
+Services (`skills/README.md`), and a path names a machine and a user account.
+
+Without these fields an upstream skill update between two runs moves a pass rate with no model
+involved and leaves nothing in the data to show it. `skills/MANIFEST.json` pins the baseline, and
+`doctor` warns on drift.
+
 ---
 
 ## 13. Invariants
@@ -1032,6 +1125,8 @@ Each of these prevents a failure that actually happened.
 | `skill_leaked_into_off_arm` | config dir not clean, or `CLAUDE_CODE_DISABLE_BUNDLED_SKILLS` not set |
 | `no_artifact_produced` | the skill needs a tool that is not allowed. Add `allowed_tools_extra`; do **not** score it |
 | `bad_baseline` | in-workspace tests already pass — the task measures nothing |
+| a task passes the OFF arm, or fails it for a reason that is not the model | open the surviving workspace (`workspace` in the row) and re-run the verdict by hand: `cd <ws> && .venv/bin/python -m pytest -q`. **Which assertion** fired decides the outcome — the rule means no headroom, a structure guard means a broken instrument, and the summary pass rate cannot tell you which (§9.1) |
+| a pass rate is 0/n and every failure is the same structure guard | the guard is over-specific. It should test that the artifact IS the briefed document, not that it matches the shape one library's API happens to produce |
 | a pass rate moved and no model or task changed | the apparatus did. Run `doctor`: `venv python` / `venv packages` compare the venv against `.python-version` and `requirements.lock`, and a row's `py_venv` / `venv_packages` say what it was measured with (§12) |
 | `pytest` fails in `tests/test_apparatus.py` | the venv drifted from the pins. `uv venv --python "$(cat .python-version)" && uv pip sync requirements.lock` |
 | `multiple_models` | a concurrent run leaked into the window. Check the lock |

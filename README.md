@@ -93,7 +93,7 @@ or rewriting it to assert the buggy behaviour, also makes `pytest` green.
 
 **2. A skill task must be pre-screened on the OFF arm, and discarded if it passes.** A task
 the agent already passes *without* the skill is not measuring the skill. This is not
-hypothetical: **9 of the first 11 tasks written have been discarded this way.**
+hypothetical: **11 of the 22 tasks written have been discarded this way.**
 `claude-sonnet-4-6` already writes `=prev*(1+$cell)` instead of hardcoding a growth rate,
 already applies `$#,##0`/`0.0%`/`0.0x` unprompted, and already builds real bulleted lists
 and a sensible slide size hierarchy.
@@ -108,25 +108,36 @@ The single best predictor of whether a compliance task will discriminate: is the
 **house-specific and arbitrary**, or is it **objectively better practice**? A capable model
 already does good practice unprompted, so rules of the second kind cannot separate the arms.
 
-Measured across 11 tasks and three skills:
+Measured across 22 tasks and three skills:
 
 | Skill | Rule kind | Outcome |
 |---|---|---|
 | `xlsx` | investment-banking colour coding (blue = hardcoded input) | **discriminates** 0/3 → 3/3 |
 | `xlsx` | professional font, no formula errors | **discriminates** 0/3 → 3/3 |
+| `docx` | Arial 12pt body, black heading text | **0/6 unaided** — the model writes Arial at 11pt and headings in `1A1A1A` or `0057FF` |
+| `pptx` | no accent lines under titles | **1/3 unaided** — it draws 0.03in bars under titles unprompted |
+| `pptx` | dark title + closing slides, light content ("sandwich") | **0/3 unaided** — all five slides came out `#0D1B2A`, three times out of three |
+| `docx` | DXA table widths, with docx-js forced | **1/3 unaided** — `w:type="pct"` in 2 of 3 |
 | `xlsx` | `$#,##0` / `0.0%` / `0.0x`; assumptions as cell refs | passes unaided — discarded |
-| `docx` | real bullets, US Letter, DXA table widths | passes unaided — discarded |
+| `docx` | real bullets, US Letter (both libraries, then docx-js forced) | passes unaided — discarded |
 | `pptx` | size hierarchy, non-text-only slides | passes unaided — discarded |
 
 Blue-for-inputs is an arbitrary banking convention with no general-purpose reason to prefer
 it, so the model does not volunteer it. "Use real list numbering instead of typing a bullet
 character" is simply correct, so it does.
 
-A second trap the `docx` rules exposed: they are **path-dependent**. They exist to correct
-footguns in docx-js, the library the skill itself mandates — A4 defaults, percentage table
-widths. The unaided agent reaches for python-docx, whose defaults already satisfy all three,
-so it never meets the footgun. Testing such a rule requires forcing the same library in both
-arms, which is a different experiment.
+Three further traps, each of which cost a task:
+
+- **Path dependence.** The `docx` rules exist to correct footguns in docx-js, the library the
+  skill itself mandates — A4 defaults, percentage table widths. The unaided agent reaches for
+  python-docx, whose defaults already satisfy them, so it never meets the footgun. Forcing the
+  library in the prompt is a different (fair, and cheaper to run) experiment: of three rules
+  re-measured that way, one discriminated and two the model got right either way.
+- **Not robustly checkable.** `pptx-body-left-aligned` needed to separate a centred title from
+  centred body copy in a deck with no title placeholder. Its ≤24pt proxy measured noise.
+- **A broken verdict looks exactly like a working one.** Every hidden verdict is therefore
+  calibrated in `tests/test_verdicts.py` against real artifacts — it must fail what an unaided
+  run produces *and* pass a compliant one — before any repetitions are bought.
 
 ### Following a skill is not free
 

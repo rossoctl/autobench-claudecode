@@ -6,6 +6,15 @@ at n=5, 2 discriminator cells at n≈30), plus 12 in the two cross-session stabi
 that are deliberately kept out of the grid ·
 **Skill measured:** `xlsx`
 
+> **Scope of the skill under test.** Every number below was measured against the skills
+> **as installed** at the digests frozen in `skills/MANIFEST.json`, which is the state those
+> directories were in on 2026-09-08 and therefore the state behind all 193 published
+> repetitions. Skill text is apparatus: `bin/autobench-claudecode-cli doctor` warns when the
+> installed digests drift from the manifest, and every row written since carries
+> `skill_variant` / `skill_sha` / `skill_files` so a moved pass rate can be attributed. Results
+> here say nothing about any later version of a skill, or about the `*-v2` rewording variants
+> in `skills/` — those are a separate experiment with its own arms.
+
 ---
 
 ## 1. Executive summary

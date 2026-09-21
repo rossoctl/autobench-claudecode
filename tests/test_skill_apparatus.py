@@ -271,8 +271,8 @@ def test_node_packages_are_a_whitelist():
 
 
 def test_the_docxjs_library_is_recorded_because_it_sets_the_default_under_test():
-    """docx-js defaults to A4, which is the exact property docxjs-us-letter asserts about --
-    so its version is inside the measurement, not beside it."""
+    """docx-js defaults a table width to w:type="pct", which is the exact property
+    docxjs-table-dxa asserts about -- so its version is inside the measurement, not beside it."""
     ap = harness.node_apparatus()
     if ap["node_packages"]["docx"] is None:
         pytest.skip("docx not installed globally")

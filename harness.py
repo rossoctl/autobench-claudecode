@@ -794,8 +794,8 @@ def run_rep(task, rep, cfg_dir, model=DEFAULT_MODEL, arm="on", timeout=1800,
         # On the ON arm this is the independent variable, so a row without it is a row whose
         # treatment is only recoverable from a file mtime.
         **skill_apparatus(cfg_dir, skill_variant),
-        # The other library path. docx-js defaults to A4 -- the exact thing docxjs-us-letter
-        # asserts about -- so its version is inside the measurement, not beside it.
+        # The other library path. docx-js defaults a table to w:type="pct" -- the exact thing
+        # docxjs-table-dxa asserts about -- so its version is inside the measurement.
         **node_apparatus(),
         # Client-side timing, from the CLI's result event. `cli_duration_api_ms` is the
         # latency measure; wall_seconds includes local tool execution and machine load.
