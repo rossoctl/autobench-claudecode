@@ -1,0 +1,43 @@
+{
+  "generated": "2026-09-21T11:13:44-04:00",
+  "source": "~/.claude/skills",
+  "note": "Digests of the skills as installed when this was written. The ON arm's treatment is this text, so a changed digest is a changed experiment, not a changed tool. Regenerate with tools/freeze_skills.py.",
+  "skills": {
+    "docx": {
+      "files": 61,
+      "bytes": 1121303,
+      "tree_sha256": "82c828d7f8cb97ae45be48a33a7957c0d59ef693b39b4be483b122192c9410f4",
+      "prose": {
+        "SKILL.md": "cfbabd72b1aec7dfaad988fb6e5e16b27dc744b9a00cae15db9045e95f53903e"
+      }
+    },
+    "pdf": {
+      "files": 12,
+      "bytes": 58692,
+      "tree_sha256": "f0d540e3edc710593a7c4a3e1fc91364b20f2f77ebde89c0e3cb66a05aaa3170",
+      "prose": {
+        "SKILL.md": "9f78b8359fbd4943ad260a7a1e436e5a96503406d6c34e99f69223d647d85b9c",
+        "forms.md": "9530b3f57034792e0242a3abfe8b3c296466329551916f2ff6c5a70db78f7e44",
+        "reference.md": "03a5f964f8abecbbe156f363356e927e864d7ee964f1012c84ee1bfc8acbeb95"
+      }
+    },
+    "pptx": {
+      "files": 67,
+      "bytes": 1240818,
+      "tree_sha256": "2636e46d6131fd54dc2abaf734c533921e62d77ff5689dd70b2fb5abd3ae1328",
+      "prose": {
+        "SKILL.md": "e5b0df918cbe9d62508b3cf808d73899633f82fc19f6258a25ef9f0de7e62125",
+        "editing.md": "6cb47c3ab17e60b7de37e83131c409ef5a90a01bfb54e999905a9c9f7dd88e68",
+        "pptxgenjs.md": "9539534d92b7170813b735a448750df3580390da2da6c52a02b687ed53ecba86"
+      }
+    },
+    "xlsx": {
+      "files": 54,
+      "bytes": 1093063,
+      "tree_sha256": "15da400327b84dfad18d7df4bccddb52dabc34b2f43f427fbbaa035ad82c2522",
+      "prose": {
+        "SKILL.md": "dd316db7785a6be12966c2a2d848931fbf5f518b3cdb0a66fa62ee835ead1cfc"
+      }
+    }
+  }
+}

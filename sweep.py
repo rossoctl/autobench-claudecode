@@ -29,18 +29,24 @@ def main():
     # runs overlap -- which would make the time-window correlation attribute one run's
     # inference events to the other.
     ap.add_argument("--out", default=str(OUT / "runs"))
+    ap.add_argument("--skill-variant", default=None, metavar="NAME",
+                    help="pass through to the harness: apply the edit recipe "
+                         "skills/<skill>-NAME/overlay.json (ON arm only)")
     a = ap.parse_args()
     out = pathlib.Path(a.out)
 
     tasks = sorted(p for p in (ROOT / "tasks").glob(a.pattern) if p.is_dir())
-    print(f"arm={a.arm} reps={a.reps} model={a.model} tasks={[t.name for t in tasks]}\n")
+    print(f"arm={a.arm} reps={a.reps} model={a.model} "
+          f"skill_variant={a.skill_variant or 'as-installed'} "
+          f"tasks={[t.name for t in tasks]}\n")
 
     rows = []
     for t in tasks:
         r = subprocess.run(
             [sys.executable, "-u", str(ROOT / "harness.py"), str(t),
              "--reps", str(a.reps), "--arm", a.arm, "--model", a.model,
-             "--out", str(out)],
+             "--out", str(out)]
+            + (["--skill-variant", a.skill_variant] if a.skill_variant else []),
             capture_output=True, text=True, timeout=7200)
         slug = re.sub(r"[^a-z0-9]+", "-", a.model.lower()).strip("-")
         latest = sorted(glob.glob(str(out / f"{t.name}-{a.arm}-{slug}-*.ndjson")))

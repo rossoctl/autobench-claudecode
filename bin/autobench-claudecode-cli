@@ -282,6 +282,27 @@ def doctor_checks():
                 + (f" -- MISSING {missing}: the ON arm cannot run" if missing else
                    f" ({', '.join(sorted(need))})")))
 
+    # The ON arm's treatment IS this text, so a drifted skill is a changed experiment, not a
+    # changed tool -- but WARN, not BLOCK, the same audience split as the venv pins: a consumer
+    # wants a number from whatever they have installed, a contributor is about to add rows to a
+    # frozen grid. `skills/MANIFEST.json` is the baseline behind the published profile.
+    mpath = ROOT / "skills" / "MANIFEST.json"
+    if not mpath.is_file():
+        out.append((WARN, "skill digests", f"{mpath.name} absent -- "
+                    "run tools/freeze_skills.py to pin what the ON arm is measuring"))
+    else:
+        frozen = json.loads(mpath.read_text())
+        pinned = frozen.get("skills") or {}
+        drift = sorted(s for s in need if s in pinned and not missing
+                       and harness.skill_tree_sha(skills_root / s) != pinned[s]["tree_sha256"])
+        unpinned = sorted(s for s in need if s not in pinned)
+        out.append(((OK if not drift and not unpinned else WARN), "skill digests",
+                    f"{len(need) - len(drift) - len(unpinned)}/{len(need)} match "
+                    f"{mpath.name} (frozen {frozen.get('generated', '?')[:10]})"
+                    + (f" -- DRIFTED {drift}: the ON-arm treatment differs from the one behind "
+                       f"results/; re-freeze and treat it as a new instrument" if drift else "")
+                    + (f" -- UNPINNED {unpinned}" if unpinned else "")))
+
     lock = harness.OUT / ".harness.lock"
     held = False
     if lock.exists():
@@ -376,9 +397,11 @@ def cmd_models(a):
 
 # ------------------------------------------------------------------ invoking
 
-def invoke(task_dir, arm, model, reps, out_dir, dry_run=False):
+def invoke(task_dir, arm, model, reps, out_dir, dry_run=False, skill_variant=None):
     cmd = [sys.executable, "-u", str(ROOT / "harness.py"), str(task_dir),
            "--reps", str(reps), "--arm", arm, "--model", model, "--out", str(out_dir)]
+    if skill_variant:
+        cmd += ["--skill-variant", skill_variant]
     if dry_run:
         print("   would run: " + " ".join(shlex.quote(c) for c in cmd))
         return 0
@@ -404,8 +427,12 @@ def cmd_run(a):
     task_dir = resolve_task(a.task)
     out_dir = pathlib.Path(a.out)
     plan_note(1, a.reps, out_dir)
+    if a.skill_variant:
+        print(f"variant  : {a.skill_variant}  (skills/<skill>-{a.skill_variant}/overlay.json "
+              f"applied to the installed skill; rows record skill_variant + skill_sha)")
     print()
-    return invoke(task_dir, a.arm, a.model, a.reps, out_dir, a.dry_run)
+    return invoke(task_dir, a.arm, a.model, a.reps, out_dir, a.dry_run,
+                  skill_variant=a.skill_variant)
 
 
 def cmd_screen(a):
@@ -418,6 +445,8 @@ def cmd_screen(a):
     cmd = [sys.executable, "-u", str(ROOT / "sweep.py"), "--arm", a.arm,
            "--reps", str(a.reps), "--pattern", a.pattern, "--model", a.model,
            "--out", str(a.out)]
+    if a.skill_variant:
+        cmd += ["--skill-variant", a.skill_variant]
     if a.dry_run:
         print("would run: " + " ".join(shlex.quote(c) for c in cmd))
         return 0
@@ -865,6 +894,11 @@ def build_parser():
     p.add_argument("--reps", type=int, default=3)
     p.add_argument("--model", default=DEFAULT_MODEL)
     p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--skill-variant", default=None, metavar="NAME",
+                   help="apply the edit recipe skills/<skill>-NAME/overlay.json to the "
+                        "installed skill instead of using it verbatim -- ON arm only. "
+                        "This measures an edit to the SKILL, so it is a different "
+                        "experiment, not a different setting (see skills/README.md)")
     add_out(p)
     p.set_defaults(fn=cmd_screen)
 
@@ -874,6 +908,11 @@ def build_parser():
     p.add_argument("--model", default=DEFAULT_MODEL)
     p.add_argument("--reps", type=int, default=5)
     p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--skill-variant", default=None, metavar="NAME",
+                   help="apply the edit recipe skills/<skill>-NAME/overlay.json to the "
+                        "installed skill instead of using it verbatim -- ON arm only. "
+                        "This measures an edit to the SKILL, so it is a different "
+                        "experiment, not a different setting (see skills/README.md)")
     add_out(p)
     p.set_defaults(fn=cmd_run)
 

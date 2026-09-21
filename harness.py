@@ -45,6 +45,12 @@ from lib_child import child_env
 ROOT = pathlib.Path(__file__).resolve().parent
 OUT = pathlib.Path(os.environ.get("HARNESS_OUT", ROOT / "out"))
 VENV = pathlib.Path(os.environ.get("HARNESS_VENV", ROOT / ".venv"))
+# Where skills are INSTALLED, and where this repo keeps the recipes that EDIT them. The
+# installed copy is the subject under test; a variant is an edit to it we want to measure
+# rather than assume. The repo holds recipes, never the skills' own prose -- see
+# skills/README.md for the licence reason and the mechanics.
+SKILLS_ROOT = pathlib.Path(os.path.expanduser("~/.claude/skills"))
+VARIANTS = ROOT / "skills"
 VENV_BIN = str(VENV / "bin")
 VENV_PY = str(VENV / "bin" / "python")
 SSE_FILE = OUT / "events" / "stream.sse"
@@ -391,9 +397,136 @@ def apparatus():
             "venv_packages": pkgs}
 
 
+def skill_tree_sha(path):
+    """One digest over a whole skill tree: every file's relative path AND its bytes.
+
+    Relative paths are IN the digest, not just contents, because a skill is resolved by
+    filename -- `pptx/SKILL.md` says "Read pptxgenjs.md for full details", so renaming that
+    file changes what the agent can reach while leaving every byte intact. Sorted, so the
+    digest never depends on directory iteration order.
+    """
+    path = pathlib.Path(path)
+    h = hashlib.sha256()
+    for p in sorted(x for x in path.rglob("*") if x.is_file()):
+        h.update(p.relative_to(path).as_posix().encode() + b"\0")
+        h.update(hashlib.sha256(p.read_bytes()).digest())
+    return h.hexdigest()
+
+
+@functools.cache
+def skill_apparatus(cfg_dir, variant=None):
+    """What SKILL this repetition had -- the other half of apparatus(), and the bigger half.
+
+    On the ON arm the skill text IS the treatment, and it is copied from ~/.claude/skills at
+    run time, so an upstream update between two runs changes the treatment with nothing in the
+    data to show it. That is the same defect the venv had before .python-version.
+
+    Digest what was handed to the CHILD (cfg_dir/skills), not what was asked for. One field
+    then covers the OFF arm's empty directory, a selection task's four candidates, and any
+    overlay -- and it is the only version that can still be checked after the fact.
+
+    Cached: the config dir is built once per harness invocation and cannot change inside it.
+    """
+    d = pathlib.Path(cfg_dir) / "skills"
+    files = [p for p in sorted(d.rglob("*")) if p.is_file()] if d.exists() else []
+    # No skill => no digest. A sha256 of nothing is a real hexdigest and would read, in the
+    # rows, as "some skill was present"; None cannot be misread.
+    return {"skill_variant": (variant or "as-installed") if files else None,
+            "skill_sha": skill_tree_sha(d) if files else None,
+            "skill_files": len(files)}
+
+
+def _op_text(op, vd):
+    """The prose an op inserts: inline `text`, or `text_file` relative to the variant dir.
+
+    Long prose belongs in a .md file so that `git diff` on a variant reads as prose rather
+    than as a JSON string with \\n in it -- the variant IS the thing under review.
+    """
+    if ("text" in op) == ("text_file" in op):
+        sys.exit(f"overlay op {op!r}: give exactly one of text / text_file")
+    if "text" in op:
+        return op["text"]
+    p = vd / op["text_file"]
+    if not p.is_file():
+        sys.exit(f"overlay op names text_file {op['text_file']!r} but {p} does not exist")
+    return p.read_text()
+
+
+def assemble_skill(skill, dest, variant=None):
+    """Copy the INSTALLED skill to dest, then apply a variant's edit RECIPE to the copy.
+
+    A recipe, not a forked file, for two reasons that happen to agree. Legally: the skills
+    are Anthropic's, licensed "no copies outside the Services, no derivative works, no
+    distribution", so this public repo cannot hold their prose or an edited version of it --
+    see skills/README.md. Scientifically: a recipe of `prepend` / `replace_once` ops over our
+    OWN added prose is a far better diff than a 20KB file whose changed paragraph a reviewer
+    has to go find. The edited skill exists only inside the per-repetition temp config dir,
+    which is exactly the temporary copy the harness already makes to run the child.
+
+    The recipe pins the bytes it was written against (`base`), so an upstream skill update
+    fails the run instead of silently applying half an edit. Returns one line per applied op
+    for the run header.
+    """
+    src = SKILLS_ROOT / skill
+    if not src.exists():
+        sys.exit(f"task names skill {skill!r} but {src} does not exist")
+    shutil.copytree(src, dest)
+    if not variant:
+        return []
+    vd = VARIANTS / f"{skill}-{variant}"
+    recipe = vd / "overlay.json"
+    if not recipe.is_file():
+        sys.exit(f"--skill-variant {variant!r}: {recipe} does not exist. A variant is a "
+                 f"directory {VARIANTS.name}/<skill>-<variant>/ holding overlay.json plus the "
+                 f"prose fragments it inserts (see {VARIANTS.name}/README.md).")
+    spec = json.loads(recipe.read_text())
+    # The recipe was authored against specific upstream bytes. If they moved, every `find`
+    # anchor below is a guess -- and a half-applied edit is the worst outcome, because the run
+    # still produces rows. Fail here, where the message can say what to do.
+    for rel, want in (spec.get("base") or {}).items():
+        got = hashlib.sha256((dest / rel).read_bytes()).hexdigest()
+        if got != want:
+            sys.exit(f"variant {skill}-{variant} was written against {rel} "
+                     f"sha256 {want[:16]}, but the installed one is {got[:16]}. The upstream "
+                     f"skill changed: re-read it, update the ops and `base`, and treat the "
+                     f"result as a NEW instrument (re-run the canary).")
+    applied = []
+    for op in spec.get("ops") or []:
+        tgt = dest / op["file"]
+        # A recipe may only edit files the skill already ships. Creating one is what a typo
+        # looks like, and a file SKILL.md never references is a file the agent never reads --
+        # the edit would appear to apply and change nothing.
+        if not tgt.is_file():
+            sys.exit(f"overlay op targets {op['file']!r}, which skill {skill!r} does not "
+                     f"ship. A variant edits existing prose; it cannot add a file the skill "
+                     f"has no reference to.")
+        body, text, kind = tgt.read_text(), _op_text(op, vd), op["op"]
+        if kind == "prepend":
+            body = text + body
+        elif kind == "append":
+            body = body + text
+        elif kind == "replace_once":
+            n = body.count(op["find"])
+            if n != 1:
+                sys.exit(f"overlay op replace_once on {op['file']}: anchor {op['find']!r} "
+                         f"occurs {n} times, expected exactly 1")
+            body = body.replace(op["find"], text)
+        else:
+            sys.exit(f"overlay op {kind!r} is not one of prepend / append / replace_once")
+        tgt.write_text(body)
+        applied.append(f"{kind} {op['file']}"
+                       + (f" @ {op['find'][:40]!r}" if kind == "replace_once" else "")
+                       + (f" <- {op['text_file']}" if "text_file" in op else ""))
+    if not applied:
+        sys.exit(f"variant {skill}-{variant} applied no ops -- an empty overlay would record "
+                 f"itself as a treatment while changing nothing")
+    return applied
+
+
 # ---------------------------------------------------------------- one repetition
 
-def run_rep(task, rep, cfg_dir, model=DEFAULT_MODEL, arm="on", timeout=1800):
+def run_rep(task, rep, cfg_dir, model=DEFAULT_MODEL, arm="on", timeout=1800,
+            skill_variant=None):
     ws = fresh_ws(task)
     before_tests = test_hashes(ws)
     if task.get("mode") == "selection" and not task.get("verdict"):
@@ -580,6 +713,10 @@ def run_rep(task, rep, cfg_dir, model=DEFAULT_MODEL, arm="on", timeout=1800):
         # What measured this row: the verdict interpreter and libraries, pinned by
         # .python-version and requirements.lock. A rebuilt venv is a changed instrument.
         **apparatus(),
+        # What the child was TREATED with: the skill tree it could actually see, digested.
+        # On the ON arm this is the independent variable, so a row without it is a row whose
+        # treatment is only recoverable from a file mtime.
+        **skill_apparatus(cfg_dir, skill_variant),
         # Client-side timing, from the CLI's result event. `cli_duration_api_ms` is the
         # latency measure; wall_seconds includes local tool execution and machine load.
         **result_fields(tr.get("result")),
@@ -620,6 +757,10 @@ def main():
                     help="on = task skill available and invoked; off = control")
     ap.add_argument("--model", default=DEFAULT_MODEL,
                     help=f"model pinned via --model (default {DEFAULT_MODEL})")
+    ap.add_argument("--skill-variant", default=None, metavar="NAME",
+                    help="apply the edit recipe skills/<skill>-NAME/overlay.json to the "
+                         "installed skill, to measure an EDIT to the skill text "
+                         "(default: the installed skill verbatim)")
     a = ap.parse_args()
 
     if not cortex_alive():
@@ -633,17 +774,28 @@ def main():
     cfg_dir = tempfile.mkdtemp(prefix="harness-cfg-")
     skills_dir = pathlib.Path(cfg_dir) / "skills"
     skills_dir.mkdir()
+    applied = []
     if task.get("mode") == "selection":
+        if a.skill_variant:
+            # Which skill fires IS the measurement here, so there is no single skill an
+            # overlay belongs to -- and editing one candidate's prose while leaving the other
+            # three alone changes the choice being measured without saying so.
+            sys.exit("--skill-variant is not allowed on a selection task: the measurement is "
+                     "which of the candidate skills fires, and an overlay on one candidate "
+                     "biases that choice silently.")
         for sk in task.get("candidate_skills") or []:
-            src = pathlib.Path(os.path.expanduser(f"~/.claude/skills/{sk}"))
+            src = SKILLS_ROOT / sk
             if not src.exists():
                 sys.exit(f"task lists candidate skill {sk!r} but {src} does not exist")
             shutil.copytree(src, skills_dir / sk)
     elif task.get("skill") and a.arm == "on":
-        src = pathlib.Path(os.path.expanduser(f"~/.claude/skills/{task['skill']}"))
-        if not src.exists():
-            sys.exit(f"task names skill {task['skill']!r} but {src} does not exist")
-        shutil.copytree(src, skills_dir / task["skill"])
+        applied = assemble_skill(task["skill"], skills_dir / task["skill"],
+                                 variant=a.skill_variant)
+    elif a.skill_variant:
+        # The OFF arm gets no skill at all, so an overlay would be silently inert -- and a
+        # run whose flag did nothing is exactly the kind of row that gets compared later.
+        sys.exit(f"--skill-variant {a.skill_variant!r} has nothing to overlay on the "
+                 f"{a.arm!r} arm: that arm is the control and receives no skill.")
 
     outdir = pathlib.Path(a.out)
     outdir.mkdir(parents=True, exist_ok=True)
@@ -660,6 +812,13 @@ def main():
           + (f" (wire marker set)" if task.get('skill_marker') else ""))
     print(f"cfg dir  : {cfg_dir} "
           f"(skills={os.listdir(skills_dir) or 'empty'}, bundled skills disabled)")
+    sk_ap = skill_apparatus(cfg_dir, a.skill_variant)
+    print(f"skill sha: {(sk_ap['skill_sha'] or '<no skill>')[:16]} "
+          f"({sk_ap['skill_files']} files, variant={sk_ap['skill_variant']})")
+    for n, line in enumerate(applied):
+        # One line per applied op, because "the variant ran" is not the same claim as "these
+        # four edits landed" -- and only the second one is checkable from the log.
+        print(f"{'overlay  :' if n == 0 else '          '} {line}")
     print(f"out      : {ndjson}\n")
 
     recs = []
@@ -668,7 +827,8 @@ def main():
         print(f"capture  : {'adopted existing' if cap.adopted else 'started'} "
               f"-> {SSE_FILE}\n")
         for i in range(1, a.reps + 1):
-            rec = run_rep(task, i, cfg_dir, model=a.model, arm=a.arm)
+            rec = run_rep(task, i, cfg_dir, model=a.model, arm=a.arm,
+                          skill_variant=a.skill_variant)
             recs.append(rec)
             fh.write(json.dumps(rec) + "\n")
             fh.flush()
