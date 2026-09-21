@@ -7,7 +7,7 @@ pass rate with no model involved. Every published repetition was measured on 3.1
 pytest 9.1.1 and openpyxl 3.1.5, and until these fields existed that was recoverable only from
 a pyvenv.cfg mtime -- which is to say, not from the data at all.
 
-The conformance tests below are deliberately STRICT rather than advisory. `profile-modelskill
+The conformance tests below are deliberately STRICT rather than advisory. `autobench-claudecode-cli
 doctor` warns a consumer whose venv has drifted, because they only want a number; a contributor
 running pytest is about to produce rows that will be compared against the frozen grid, and a
 drifted apparatus makes that comparison meaningless in a way no later analysis can detect.
