@@ -192,3 +192,91 @@ def test_every_hidden_verdict_task_is_calibrated_here():
     assert not missing, (
         f"no fixture calibration for {missing}. Add one here before spending on the arm: the "
         f"pptx-size-contrast defect cost three paid repetitions and produced a wrong finding.")
+
+
+# ------------------------------------------------------- docx-brand-arial-black
+
+BRAND_TEXT = [("Q3 Retention", "Title"),
+              ("What the numbers were", "Heading1"),
+              ("Retention held at 91% through Q3, up from 88% in Q2.", None),
+              ("What we are doing next", "Heading1"),
+              ("We are extending the onboarding checklist.", None)]
+
+
+def brand_with_python_docx(tmp_path, compliant):
+    """The library an unaided agent reaches for, and the compliant version of the same doc."""
+    from docx import Document
+    from docx.enum.text import WD_COLOR_INDEX  # noqa: F401  (import parity with a real run)
+    from docx.shared import Pt, RGBColor
+    d = Document()
+    if compliant:
+        # The whole rule, expressed the python-docx way: default run font on the Normal
+        # style, and explicit black on every heading style the document uses.
+        normal = d.styles["Normal"]
+        normal.font.name = "Arial"
+        normal.font.size = Pt(12)
+        for sname in ("Title", "Heading 1"):
+            st = d.styles[sname]
+            st.font.name = "Arial"
+            st.font.color.rgb = RGBColor(0, 0, 0)
+    for text, style in BRAND_TEXT:
+        if style == "Title":
+            d.add_heading(text, level=0)
+        elif style:
+            d.add_heading(text, level=1)
+        else:
+            d.add_paragraph(text)
+    out = tmp_path / ("compliant" if compliant else "default")
+    out.mkdir(parents=True, exist_ok=True)
+    p = out / "retention.docx"
+    d.save(p)
+    return p
+
+
+def test_docx_brand_arial_black_discriminates_on_python_docx(tmp_path):
+    """The default template is Cambria 11pt with Heading 1 = 365F91 -- measured, and the
+    reason a task can ask for Arial-and-black without asking for anything exotic."""
+    rc, out = run_verdict("docx-brand-arial-black",
+                          brand_with_python_docx(tmp_path, False), tmp_path / "a")
+    assert rc != 0, f"verdict passes the python-docx default:\n{out[-800:]}"
+    rc, out = run_verdict("docx-brand-arial-black",
+                          brand_with_python_docx(tmp_path, True), tmp_path / "b")
+    assert rc == 0, f"verdict fails a compliant python-docx document:\n{out[-800:]}"
+
+
+BRAND_BODY = ('new Paragraph({ heading: HeadingLevel.TITLE, text: "Q3 Retention" }), '
+              'new Paragraph({ heading: HeadingLevel.HEADING_1, '
+              'text: "What the numbers were" }), '
+              'new Paragraph("Retention held at 91% through Q3, up from 88% in Q2."), '
+              'new Paragraph({ heading: HeadingLevel.HEADING_1, '
+              'text: "What we are doing next" }), '
+              'new Paragraph("We are extending the onboarding checklist.")')
+
+BRAND_PRELUDE = """
+    import { Document, Packer, Paragraph, HeadingLevel } from "docx";
+    import fs from "fs";
+"""
+
+
+def test_docx_brand_arial_black_discriminates_on_docxjs(tmp_path):
+    """The same verdict, the other library: a plain docx-js document ships an EMPTY
+    <w:rPrDefault/> and no theme part, so nothing declares Arial and nothing declares black."""
+    rc, out = run_verdict("docx-brand-arial-black", build_with_docxjs(
+        tmp_path / "d", BRAND_PRELUDE + f"""
+        const doc = new Document({{ sections: [{{ children: [{BRAND_BODY}] }}] }});
+        fs.writeFileSync("retention.docx", await Packer.toBuffer(doc));
+        """, "retention.docx"), tmp_path / "d")
+    assert rc != 0, f"verdict passes the docx-js default:\n{out[-800:]}"
+    rc, out = run_verdict("docx-brand-arial-black", build_with_docxjs(
+        tmp_path / "c", BRAND_PRELUDE + f"""
+        const black = {{ color: "000000" }};
+        const doc = new Document({{
+          styles: {{
+            default: {{
+              document: {{ run: {{ font: "Arial", size: 24 }} }},
+              title: {{ run: {{ font: "Arial", size: 24, ...black }} }},
+              heading1: {{ run: {{ font: "Arial", size: 24, ...black }} }} }} }},
+          sections: [{{ children: [{BRAND_BODY}] }}] }});
+        fs.writeFileSync("retention.docx", await Packer.toBuffer(doc));
+        """, "retention.docx"), tmp_path / "c")
+    assert rc == 0, f"verdict fails a compliant docx-js document:\n{out[-800:]}"
