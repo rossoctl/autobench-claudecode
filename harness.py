@@ -71,6 +71,17 @@ EVENT_KEEP = ("at", "requestId", "sessionId", "host", "phase", "direction",
 INF_KEEP = ("model", "promptTokens", "completionTokens", "totalTokens", "inputTokens",
             "outputTokens", "cacheReadTokens", "cacheWriteTokens", "reasoningTokens",
             "maxTokens", "stream", "isAction", "finishReason")
+# The CLI's own `result` event -- the last line of --output-format stream-json -- is a
+# SECOND, PROXY-INDEPENDENT instrument. Everything else in the measurement block comes from
+# Cortex, so a row taken with the proxy absent measures nothing; these fields survive that.
+# They are also the only timing here that is not wall-clock: duration_api_ms excludes local
+# tool execution, which wall_seconds cannot separate (wall moved x1.34-1.81 for two models
+# doing provably identical work, purely from machine load).
+#
+# WHITELISTED for the same reason as the Cortex fields, and it is not a formality: the
+# result event also carries `result`, the final assistant text.
+RESULT_KEEP = ("duration_ms", "duration_api_ms", "ttft_ms", "ttft_stream_ms",
+               "time_to_request_ms", "num_turns", "total_cost_usd")
 
 
 # ---------------------------------------------------------------- infrastructure
@@ -323,6 +334,29 @@ def analyse_transcript(stdout):
             "assistant_turns": turns, "result": result}
 
 
+def result_fields(res):
+    """Whitelisted timing/usage from the CLI's own `result` event, every key prefixed `cli_`.
+
+    Prefixed because these are a DIFFERENT INSTRUMENT from the Cortex columns sitting beside
+    them: they are what the client believed happened, counted before the request left the
+    machine. `cli_total_cost_usd` especially -- that is the CLI's own estimate at its list
+    prices, NOT this gateway's rates, so money still has to come from pricing.cost().
+
+    Absent (timed out, killed, or a CLI build without the field) -> every key present and
+    None, so the column exists in every row and a missing measurement can never be read as a
+    zero one.
+    """
+    res = res or {}
+    out = {f"cli_{k}": res.get(k) for k in RESULT_KEEP}
+    # Shape-based filter rather than a key list: `usage` gains nested sub-objects across CLI
+    # versions (cache_creation breakdowns, server_tool_use) and an int is the only thing a
+    # token count can be. Same discipline as the Cortex whitelist -- decide what may be kept,
+    # not what must be dropped.
+    usage = {k: v for k, v in (res.get("usage") or {}).items() if isinstance(v, int)}
+    out["cli_usage"] = usage or None
+    return out
+
+
 # ---------------------------------------------------------------- one repetition
 
 def run_rep(task, rep, cfg_dir, model=DEFAULT_MODEL, arm="on", timeout=1800):
@@ -509,6 +543,9 @@ def run_rep(task, rep, cfg_dir, model=DEFAULT_MODEL, arm="on", timeout=1800):
         "tests_untouched": tests_untouched,
         "child_exit": r.returncode, "timed_out": timed_out,
         "wall_seconds": round(wall, 1),
+        # Client-side timing, from the CLI's result event. `cli_duration_api_ms` is the
+        # latency measure; wall_seconds includes local tool execution and machine load.
+        **result_fields(tr.get("result")),
         "assistant_turns": tr["assistant_turns"],
         "tool_calls": len(tr["tools"]),
         "tool_histogram": {t: tr["tools"].count(t) for t in sorted(set(tr["tools"]))},
@@ -602,13 +639,17 @@ def main():
             if rec.get("mode") == "selection":
                 sel = (f"fired={rec['skills_fired']} "
                        f"want={rec['expected_selection']} ")
+            # API time beside wall time, because they answer different questions: wall
+            # includes local tool execution and whatever else the machine was doing.
+            api = rec.get("cli_duration_api_ms")
+            api_s = f"api={api / 1000:.0f}s " if api else ""
             print(f"  rep {i}: passed={rec['passed']} "
                   f"{sel}"
                   f"pytest='{rec['pytest_tail'][:30]}' "
                   f"turns={rec['assistant_turns']} tools={rec['tool_calls']} "
                   f"llm_calls={rec['llm_calls']} pin_ok={rec['model_pin_honoured']} "
                   f"tok(in/out/cache)={rec['input_tokens']}/{rec['output_tokens']}/"
-                  f"{rec['cache_read_tokens']} wall={rec['wall_seconds']}s "
+                  f"{rec['cache_read_tokens']} {api_s}wall={rec['wall_seconds']}s "
                   f"confounded={rec['confounded']}")
             if rec["confound_reasons"]:
                 print(f"         reasons: {rec['confound_reasons']}")
@@ -619,7 +660,9 @@ def main():
     print(f"  confounded    : {sum(r['confounded'] for r in recs)}/{len(recs)}")
 
     def stats(key, rows):
-        vals = [r[key] for r in rows]
+        # Skip None rather than coercing: a timing the CLI did not report is a MISSING
+        # measurement, and averaging it in as 0 would quietly halve a latency median.
+        vals = [r[key] for r in rows if r.get(key) is not None]
         if not vals:
             return "n/a"
         med = statistics.median(vals)
@@ -628,8 +671,8 @@ def main():
         return f"median={med:g} mean={mean:.1f} CV={cv:.2f}"
 
     # Medians/CV, not single values: this workload is not deterministic.
-    for key in ("wall_seconds", "total_tokens", "input_tokens", "output_tokens",
-                "cache_read_tokens", "llm_calls", "tool_calls"):
+    for key in ("wall_seconds", "cli_duration_api_ms", "total_tokens", "input_tokens",
+                "output_tokens", "cache_read_tokens", "llm_calls", "tool_calls"):
         print(f"  {key:18}: {stats(key, ok or recs)}")
     print(f"\n  ndjson: {ndjson}")
 
