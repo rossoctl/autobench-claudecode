@@ -31,10 +31,12 @@ sees tool calls but not tokens.
 - `claude` CLI, authenticated.
 - A running Cortex proxy in **forward + `tls_bridge`** mode. This is the only shape that
   dispatches the inference parsers — the reverse role records events with `plugins=[]`.
-- Python 3.12+.
+- Python 3.12+ to drive it. The **venv is pinned to 3.14.3** (`.python-version`) because it
+  runs the verdict and sits on the agent's `PATH` — it is the apparatus, not a tool observing
+  it, and that is the interpreter every published repetition was measured on.
 
 ```bash
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+uv venv --python "$(cat .python-version)" && uv pip install -r requirements.txt
 abctl service start                     # Cortex, on 47600/47601
 ```
 

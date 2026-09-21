@@ -79,7 +79,8 @@ A repetition is *not* one LLM call. A single task issues several — across the 
 | Requirement | Check | Note |
 |---|---|---|
 | macOS or Linux | — | the harness uses `fcntl` locking and POSIX paths |
-| Python **3.12+** as `python3` | `python3 -V` | stdlib only for the driver; the venv is for the *verdict* |
+| Python **3.12+** to drive it | `python3 -V` | stdlib only for the driver. 3.12 is the supported floor, verified: every module compiles and `report` is byte-identical to 3.14 over the whole grid |
+| Python **3.14.3** for the venv | `cat .python-version` | *not* the same question. The venv is the measurement apparatus, so it is pinned — §2.2 |
 | Claude Code CLI, authenticated | `claude --version` | this is the subject under test, not a dependency to pin |
 | **Cortex**, running | `curl -s localhost:47601/healthz` | the instrument. Without it there are no tokens at all (§2.3) |
 | A gateway to talk to | `ANTHROPIC_BASE_URL` set | an internal LiteLLM in this repo's case; any Anthropic-compatible endpoint works |
@@ -90,7 +91,13 @@ A repetition is *not* one LLM call. A single task issues several — across the 
 ```bash
 git clone https://github.com/rossoctl/autobench-claudecode.git
 cd autobench-claudecode
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+
+# The venv is pinned to the interpreter the published grid was measured on (.python-version).
+uv venv --python "$(cat .python-version)"
+uv pip install -r requirements.txt
+
+# No uv? The stdlib works, but nothing then enforces the pin -- check it afterwards.
+# python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
 # optional: put the CLI on PATH. It resolves its own real path, so a symlink still
 # finds the clone it belongs to.
@@ -105,6 +112,21 @@ matter which interpreter drives it — so the venv must exist even if you invoke
 the system `python3`. Note that its `bin/` is also prepended to the **child's** `PATH`, so
 anything a verdict asserts must be importable there too; that is deliberate, and it means the
 agent can use those libraries as well.
+
+**Why the venv interpreter is pinned and the driver's is not.** They are different roles. The
+driver only reads NDJSON and does arithmetic, so any 3.12+ interpreter gives the same answer —
+`report` over all 159 published rows is byte-identical on 3.12.12 and 3.14.3. The venv is the
+*apparatus*: it runs the verdict that decides pass or fail, and its `bin/` is on the child's
+`PATH`, so it is part of the environment being measured rather than a tool observing it. Every
+one of the 193 published repetitions was measured on **3.14.3 with pytest 9.1.1 and openpyxl
+3.1.5** — the venv was created one minute before the first recorded row and never rebuilt — so
+that is what `.python-version` records. Rebuilding it on a different interpreter or a newer
+openpyxl is a change to the instrument, and a verdict that flips for that reason is
+indistinguishable, in the rows, from a model that got worse.
+
+This is also why the CLI is not a `uv tool install`: a tool environment is isolated from the
+clone, and this CLI needs `tasks/`, `out/`, `harness.py` and that exact venv, all resolved
+relative to its own real path.
 
 **What you set, and what the harness sets.** Getting this backwards is the most common way a
 run produces rows full of zeros:
