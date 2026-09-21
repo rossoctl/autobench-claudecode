@@ -10,7 +10,7 @@ here:
 |---|---|
 | [`README.md`](../README.md) | why the design is shaped this way, and the headline findings |
 | [`results/EVALUATION.md`](../results/EVALUATION.md) | the study itself — results, statistics, limitations |
-| this file (`docs/DEVELOPER_GUIDE.md`) | installation, the `autobench-modelskill` CLI, the data path, the contracts, the invariants, how to extend it |
+| this file (`docs/DEVELOPER_GUIDE.md`) | installation, the `profile-modelskill` CLI, the data path, the contracts, the invariants, how to extend it |
 
 Every path below is relative to the **repository root**, not to `docs/` — so `harness.py`
 means `../harness.py` from here, and commands are written to be run from the root.
@@ -22,7 +22,7 @@ means `../harness.py` from here, and commands are written to be run from the roo
    [install](#22-install) · [Cortex](#23-cortex-the-instrument) ·
    [the skills under test](#24-the-skills-under-test) ·
    [why there is no `pip install`](#25-why-there-is-no-pip-install)
-3. [**Benchmarking with `autobench-modelskill`**](#3-benchmarking-with-autobench-modelskill) —
+3. [**Benchmarking with `profile-modelskill`**](#3-benchmarking-with-profile-modelskill) —
    [doctor first](#31-doctor-first) · [what you can benchmark](#32-what-you-can-benchmark) ·
    [one cell](#33-run-one-cell) · [across models](#34-compare-across-models) ·
    [reading the report](#35-reading-the-report) ·
@@ -94,9 +94,9 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
 # optional: put the CLI on PATH. It resolves its own real path, so a symlink still
 # finds the clone it belongs to.
-ln -s "$PWD/bin/autobench-modelskill" ~/.local/bin/autobench-modelskill
+ln -s "$PWD/bin/profile-modelskill" ~/.local/bin/profile-modelskill
 
-autobench-modelskill doctor        # or ./bin/autobench-modelskill doctor
+profile-modelskill doctor        # or ./bin/profile-modelskill doctor
 ```
 
 The venv is **verdict-side**: `openpyxl`, `python-pptx` and `pytest` are what score an
@@ -153,12 +153,12 @@ This repository contains a top-level module named `profile`, which would **shado
 profiler for the entire environment** if it were ever put on `sys.path` by a distribution —
 and an editable install does exactly that, via a `.pth`, for every process in that
 environment regardless of the working directory. So there is no package and no console-script
-entry point. `bin/autobench-modelskill` is a stdlib-only script that resolves its own real
+entry point. `bin/profile-modelskill` is a stdlib-only script that resolves its own real
 path, which is all a symlink on `PATH` needs.
 
 ---
 
-## 3. Benchmarking with `autobench-modelskill`
+## 3. Benchmarking with `profile-modelskill`
 
 One command surface over the whole pipeline, for the question *"which model runs this skill
 most efficiently?"*. It plans the repetitions, hands each one to `harness.py`, and compiles
@@ -172,7 +172,7 @@ for (§11 says what happened the one time that was possible).
 ### 3.1 `doctor` first
 
 ```console
-$ autobench-modelskill doctor
+$ profile-modelskill doctor
 [  ok  ] python              3.12.7 (/usr/bin/python3)
 [  ok  ] claude CLI          2.1.257 (Claude Code)  (/Users/you/.local/bin/claude)
 [  ok  ] venv                /repo/.venv pytest + openpyxl importable
@@ -197,9 +197,9 @@ above are illustrative.
 ### 3.2 What you can benchmark
 
 ```bash
-autobench-modelskill tasks              # active tasks: mode, skill, verdict style, arms
-autobench-modelskill tasks --retired    # the discarded ones. A discarded task is a result
-autobench-modelskill models             # aliases, the rate card, and its date
+profile-modelskill tasks              # active tasks: mode, skill, verdict style, arms
+profile-modelskill tasks --retired    # the discarded ones. A discarded task is a result
+profile-modelskill models             # aliases, the rate card, and its date
 ```
 
 `models` prints the rate card behind every dollar figure, its `SOURCE_DATE`, and both cache
@@ -209,7 +209,7 @@ and still reports volume and latency.
 ### 3.3 Run one cell
 
 ```bash
-autobench-modelskill run --task cortex-pyfix-001 --reps 5 --model claude-sonnet-5
+profile-modelskill run --task cortex-pyfix-001 --reps 5 --model claude-sonnet-5
 ```
 
 `cortex-pyfix-001` is the canary — no skill involved, so it tests the rig rather than a
@@ -228,7 +228,7 @@ row that survives the proxy being absent.
 ### 3.4 Compare across models
 
 ```bash
-autobench-modelskill compare \
+profile-modelskill compare \
   --task xlsx-fin-colors \
   --models claude-haiku-4-5-20251001,claude-sonnet-5,claude-opus-5 \
   --arms on,off --reps 5 --significance
@@ -249,10 +249,10 @@ runs.
 ### 3.5 Reading the report
 
 ```bash
-autobench-modelskill report                            # default out/modelskill
-autobench-modelskill report --out out/runs --task xlsx-fin-font-clean --arms on
-autobench-modelskill report --scenario A               # the cache-billing upper bound
-autobench-modelskill report --json                     # machine-readable
+profile-modelskill report                            # default out/modelskill
+profile-modelskill report --out out/runs --task xlsx-fin-font-clean --arms on
+profile-modelskill report --scenario A               # the cache-billing upper bound
+profile-modelskill report --json                     # machine-readable
 ```
 
 `report` never invokes anything, so it is free to re-run and free to re-slice. It prints, in
@@ -351,15 +351,15 @@ Full recipe in §9, but the order is not optional:
 # 1. write tasks/<id>/ -- prompt.md, workspace/, verdict/, meta.json  (§6, §9)
 
 # 2. GATE: does the agent already do it without the skill?
-autobench-modelskill screen --pattern '<id>' --arm off --reps 3
+profile-modelskill screen --pattern '<id>' --arm off --reps 3
 #    passes unaided  -> the task measures the model, not the skill. Discard it.
 #    fails every time -> keep
 
 # 3. confirm the treatment actually arrived: skill_on_wire must be true on the ON arm
-autobench-modelskill run --task <id> --arm on --reps 3
+profile-modelskill run --task <id> --arm on --reps 3
 
 # 4. only now buy repetitions across models
-autobench-modelskill compare --task <id> --models ... --arms on,off --reps 5
+profile-modelskill compare --task <id> --models ... --arms on,off --reps 5
 ```
 
 Step 2 is the whole study in miniature. The convention under test must be **arbitrary, not
@@ -370,7 +370,7 @@ the reason.
 ### 3.9 Full syntax
 
 ```
-autobench-modelskill <command> [flags]
+profile-modelskill <command> [flags]
 
 doctor                       every prerequisite; exit 1 on a blocker
 tasks    [--retired]
@@ -402,7 +402,7 @@ developer-facing entry points and are documented in §10.
 
 | Path | What |
 |---|---|
-| `bin/autobench-modelskill` | the consumer CLI (§3). Plans repetitions, then compiles token/cost/latency. A script, not a package — see §2.5 |
+| `bin/profile-modelskill` | the consumer CLI (§3). Plans repetitions, then compiles token/cost/latency. A script, not a package — see §2.5 |
 | `harness.py` | the driver. One task → fresh workspace → `claude -p` → verdict → correlate Cortex → one NDJSON row |
 | `sweep.py` | a set of tasks through one arm as a matrix |
 | `profile.py` | the model grid: `--run` invokes, `--report` recompiles from stored runs with no invocations, `--freeze` publishes membership |
@@ -817,7 +817,7 @@ it. Cortex must be reachable either way — session API on `127.0.0.1:47601`, pr
 
 | Command | Effect |
 |---|---|
-| `autobench-modelskill doctor` | check the whole rig before spending anything (§3.1) |
+| `profile-modelskill doctor` | check the whole rig before spending anything (§3.1) |
 | `python3 harness.py tasks/cortex-pyfix-001 --reps 3` | the canary: proves the rig works |
 | `python3 harness.py tasks/<id> --arm off --reps 3` | pre-screen a candidate task |
 | `python3 harness.py tasks/<id> --model claude-sonnet-5 --out out/scratch` | one cell, output redirected |

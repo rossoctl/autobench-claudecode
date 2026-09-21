@@ -12,7 +12,7 @@ the verdict is scored, the invariants, and how to add a task — see
 [`docs/DEVELOPER_GUIDE.md`](docs/DEVELOPER_GUIDE.md). To install the rig and benchmark a
 model + skill pair without reading any of that, go straight to
 [§2 Installation](docs/DEVELOPER_GUIDE.md#2-installation) and
-[§3 `autobench-modelskill`](docs/DEVELOPER_GUIDE.md#3-benchmarking-with-autobench-modelskill).
+[§3 `profile-modelskill`](docs/DEVELOPER_GUIDE.md#3-benchmarking-with-profile-modelskill).
 
 ## What measures what
 
@@ -44,11 +44,11 @@ To benchmark a model + skill pair — token efficiency, cost efficiency, latency
 CLI, which checks the rig before it spends anything and keeps its rows out of the published
 grid. Installation and worked examples are in
 [§2](docs/DEVELOPER_GUIDE.md#2-installation) and
-[§3](docs/DEVELOPER_GUIDE.md#3-benchmarking-with-autobench-modelskill).
+[§3](docs/DEVELOPER_GUIDE.md#3-benchmarking-with-profile-modelskill).
 
 ```bash
-bin/autobench-modelskill doctor                          # instrument, CA, credentials
-bin/autobench-modelskill compare --task cortex-pyfix-001 \
+bin/profile-modelskill doctor                          # instrument, CA, credentials
+bin/profile-modelskill compare --task cortex-pyfix-001 \
     --models claude-opus-5,claude-sonnet-5 --reps 5
 ```
 

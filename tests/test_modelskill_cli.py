@@ -1,4 +1,4 @@
-"""Tests for bin/autobench-modelskill -- the consumer-facing CLI.
+"""Tests for bin/profile-modelskill -- the consumer-facing CLI.
 
 WHY THIS FILE EXISTS. The CLI is the surface a consumer sees, so its failure mode is not a
 traceback, it is a plausible-looking table. Three ways that happens, all pinned below:
@@ -36,17 +36,17 @@ def _load_cli():
     A pip-installable distribution would put a top-level module named `profile` on sys.path
     and shadow the stdlib profiler for the whole environment, editable installs included.
     """
-    path = ROOT / "bin" / "autobench-modelskill"
+    path = ROOT / "bin" / "profile-modelskill"
     # An explicit SourceFileLoader is required: the file has no .py suffix, so import machinery
     # will not guess that it is Python source.
     spec = importlib.util.spec_from_file_location(
-        "ams", path, loader=importlib.machinery.SourceFileLoader("ams", str(path)))
+        "pms", path, loader=importlib.machinery.SourceFileLoader("pms", str(path)))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
 
 
-ams = _load_cli()
+pms = _load_cli()
 
 
 def row(task="t1", arm="on", model="claude-sonnet-5", rep=1, *, cr=95_000, cw=5_000,
@@ -83,7 +83,7 @@ def test_default_out_cannot_be_reached_by_a_freeze():
     A consumer's exploratory repetitions landing in that glob would join cells other people
     have published numbers for.
     """
-    rel = ams.DEFAULT_OUT.relative_to(ams.ROOT).as_posix()
+    rel = pms.DEFAULT_OUT.relative_to(pms.ROOT).as_posix()
     assert rel not in prof.RUN_DIRS
     for d in prof.RUN_DIRS:
         assert not rel.startswith(d + "/") and rel != d
@@ -93,7 +93,7 @@ def test_default_out_cannot_be_reached_by_a_freeze():
 
 def test_missing_latency_is_a_dash_not_a_zero(tmp_path, capsys):
     write(tmp_path, "t1-on-claude-sonnet-5-1", [row(rep=i) for i in (1, 2, 3)])
-    assert ams.report(tmp_path) == 0
+    assert pms.report(tmp_path) == 0
     out = capsys.readouterr().out
     assert "carry no api timing" in out
     assert "0/3" in out, "the timed-row count must show that none of them were timed"
@@ -104,7 +104,7 @@ def test_missing_latency_is_a_dash_not_a_zero(tmp_path, capsys):
 def test_latency_is_reported_when_the_rows_carry_it(tmp_path, capsys):
     write(tmp_path, "t1-on-claude-sonnet-5-1",
           [row(rep=i, api_ms=48_120) for i in (1, 2, 3)])
-    ams.report(tmp_path)
+    pms.report(tmp_path)
     out = capsys.readouterr().out
     lat = out.split("LATENCY")[1]
     assert "48.1" in lat, "api milliseconds should render as seconds"
@@ -120,8 +120,8 @@ def test_confounded_repetitions_are_excluded_from_every_number(tmp_path):
             # tokens, so if it were averaged in no median could hide it.
             row(rep=3, cr=950_000, calls=60, confounded=True)]
     write(tmp_path, "t1-on-claude-sonnet-5-1", rows)
-    by, membership, total = ams.load_rows(tmp_path)
-    m = ams.cell_metrics(by[("t1", "on", "claude-sonnet-5")], "claude-sonnet-5", "B")
+    by, membership, total = pms.load_rows(tmp_path)
+    m = pms.cell_metrics(by[("t1", "on", "claude-sonnet-5")], "claude-sonnet-5", "B")
     assert (m["n"], m["dropped"]) == (2, 1)
     assert m["tok"] == 101_100
     assert total == 3, "membership counts every row on disk, including the void ones"
@@ -133,7 +133,7 @@ def test_zero_pass_rate_does_not_divide_by_zero(tmp_path, capsys):
     """An OFF-arm cell that never passes is the NORMAL case -- that is the gate working."""
     write(tmp_path, "t1-off-claude-sonnet-5-1",
           [row(arm="off", rep=i, passed=False) for i in (1, 2, 3)])
-    assert ams.report(tmp_path) == 0
+    assert pms.report(tmp_path) == 0
     out = capsys.readouterr().out
     assert "undefined" in out, "cost per solved task does not exist when nothing is solved"
 
@@ -152,7 +152,7 @@ def test_cold_baseline_is_per_cell_not_pooled(tmp_path, capsys):
            for i in (1, 2, 3, 4, 5)])
     write(tmp_path, "t1-on-claude-sonnet-5-1",
           [row(rep=1, cr=80_000, cw=20_000)] + [row(rep=i) for i in (2, 3, 4, 5)])
-    ams.report(tmp_path)
+    pms.report(tmp_path)
     out = capsys.readouterr().out
     cold = out.split("COLD-CACHE")[1].split("These re-tier")[0]
     assert "haiku" not in cold, "a uniformly higher share is a model property, not a cold cache"
@@ -164,7 +164,7 @@ def test_a_tiny_cell_reports_no_cold_repetition(tmp_path, capsys):
     baseline and would be silently declared normal. Better to report nothing."""
     write(tmp_path, "t1-on-claude-sonnet-5-1",
           [row(rep=1, cr=80_000, cw=20_000), row(rep=2)])
-    ams.report(tmp_path)
+    pms.report(tmp_path)
     assert "COLD-CACHE" not in capsys.readouterr().out
 
 
@@ -173,7 +173,7 @@ def test_a_tiny_cell_reports_no_cold_repetition(tmp_path, capsys):
 def test_membership_names_only_the_files_the_numbers_came_from(tmp_path, capsys):
     write(tmp_path, "t1-on-claude-sonnet-5-1", [row(rep=i) for i in (1, 2, 3)])
     write(tmp_path, "t2-on-claude-sonnet-5-1", [row(task="t2", rep=i) for i in (1, 2, 3)])
-    ams.report(tmp_path, tasks=["t1"])
+    pms.report(tmp_path, tasks=["t1"])
     out = capsys.readouterr().out
     head = out.split("VOLUME")[0]
     assert "t1-on" in head and "t2-on" not in head
@@ -183,13 +183,13 @@ def test_membership_names_only_the_files_the_numbers_came_from(tmp_path, capsys)
 def test_partial_use_of_a_file_is_stated(tmp_path, capsys):
     """One file, two arms: the digest covers the whole file, so the row count must say so."""
     write(tmp_path, "mixed", [row(rep=1), row(rep=2), row(arm="off", rep=3, passed=False)])
-    ams.report(tmp_path, arms=["on"])
+    pms.report(tmp_path, arms=["on"])
     assert "2 of 3 row(s)" in capsys.readouterr().out
 
 
 def test_internal_bookkeeping_never_reaches_the_json(tmp_path, capsys):
     write(tmp_path, "t1-on-claude-sonnet-5-1", [row(rep=i) for i in (1, 2, 3)])
-    ams.report(tmp_path, as_json=True)
+    pms.report(tmp_path, as_json=True)
     blob = capsys.readouterr().out
     assert "_src" not in blob
     parsed = json.loads(blob)
@@ -206,7 +206,7 @@ def test_intractable_exact_test_is_skipped_and_says_so(tmp_path, capsys):
            for i in range(1, 30)])
     write(tmp_path, "t1-on-claude-sonnet-5-1",
           [row(rep=i, out=2_000 + i * 10) for i in range(1, 12)])
-    ams.report(tmp_path, significance=True)
+    pms.report(tmp_path, significance=True)
     out = capsys.readouterr().out
     sig = out.split("SIGNIFICANCE")[1]
     assert "exact test skipped" in sig and "2,311,801,440 splits" in sig
@@ -221,7 +221,7 @@ def test_tractable_exact_test_reports_p_and_its_floor(tmp_path, capsys):
           [row(model="claude-opus-5", rep=i, out=1_000 + i * 5) for i in range(1, 6)])
     write(tmp_path, "t1-on-claude-sonnet-5-1",
           [row(rep=i, out=5_000 + i * 5) for i in range(1, 6)])
-    ams.report(tmp_path, significance=True)
+    pms.report(tmp_path, significance=True)
     sig = capsys.readouterr().out.split("SIGNIFICANCE")[1]
     # 5 v 5 -> C(10,5) = 252 splits -> the smallest two-sided p this design can produce is
     # 2/252 = 0.008. Printing p without that floor beside it overstates the result.
@@ -235,7 +235,7 @@ def test_a_cell_failing_the_token_identities_is_quarantined(tmp_path, capsys):
     bad = row(rep=1)
     bad["total_tokens"] += 5_000          # total != prompt + completion
     write(tmp_path, "t1-on-claude-sonnet-5-1", [bad, row(rep=2), row(rep=3)])
-    assert ams.report(tmp_path) == 1, "nothing reportable is left, so this is not a success"
+    assert pms.report(tmp_path) == 1, "nothing reportable is left, so this is not a success"
     assert "QUARANTINED" in capsys.readouterr().out
 
 
@@ -244,9 +244,9 @@ def test_a_cell_failing_the_token_identities_is_quarantined(tmp_path, capsys):
 def test_doctor_blocks_on_a_missing_instrument(monkeypatch, capsys):
     """Cortex down is not a degraded run, it is an unmeasurable one: every token field is 0
     and the row self-flags no_cortex_inference_events."""
-    monkeypatch.setattr(ams.harness, "cortex_alive", lambda: False)
-    monkeypatch.setattr(ams.shutil, "which", lambda _: None)
-    assert ams.cmd_doctor(None) == 1
+    monkeypatch.setattr(pms.harness, "cortex_alive", lambda: False)
+    monkeypatch.setattr(pms.shutil, "which", lambda _: None)
+    assert pms.cmd_doctor(None) == 1
     out = capsys.readouterr().out
     assert "BLOCK" in out and "abctl service start" in out
     assert "claude CLI" in out and "not on PATH" in out
@@ -257,12 +257,12 @@ def test_doctor_reports_credentials_by_digest_only():
     history came from printing something believed safe, once via a neighbouring process's
     environment. The check is on the CHANNEL, not on intent."""
     secret = "sk-ant-not-a-real-token-abcdef123456"
-    shown = ams._secret_shape(secret)
+    shown = pms._secret_shape(secret)
     assert secret not in shown
     assert "sha256:" in shown and len(shown.split("sha256:")[1]) == 8
-    assert ams._secret_shape("") == "unset" and ams._secret_shape(None) == "unset"
+    assert pms._secret_shape("") == "unset" and pms._secret_shape(None) == "unset"
     # And that doctor routes both token variables through it rather than formatting them.
-    src = inspect.getsource(ams.doctor_checks)
+    src = inspect.getsource(pms.doctor_checks)
     assert "_secret_shape(tok)" in src and "_secret_shape(key)" in src
     assert "{tok}" not in src and "{key}" not in src
 
@@ -270,14 +270,14 @@ def test_doctor_reports_credentials_by_digest_only():
 # --------------------------------------------------------------- run planning
 
 def test_run_is_planned_not_performed_under_dry_run(capsys):
-    assert ams.main(["run", "--task", "cortex-pyfix-001", "--reps", "1", "--dry-run"]) == 0
+    assert pms.main(["run", "--task", "cortex-pyfix-001", "--reps", "1", "--dry-run"]) == 0
     out = capsys.readouterr().out
     assert "would run" in out and "harness.py" in out
     assert "--out" in out, "every invocation must be pinned to the chosen output directory"
 
 
 def test_few_repetitions_are_flagged_before_spending_money(capsys):
-    ams.main(["compare", "--task", "cortex-pyfix-001", "--models", "claude-sonnet-5",
+    pms.main(["compare", "--task", "cortex-pyfix-001", "--models", "claude-sonnet-5",
               "--reps", "2", "--dry-run"])
     out = capsys.readouterr().out
     assert "billable" in out
@@ -285,7 +285,7 @@ def test_few_repetitions_are_flagged_before_spending_money(capsys):
 
 
 def test_an_unpriced_model_still_runs_but_is_flagged(capsys):
-    ams.main(["compare", "--task", "cortex-pyfix-001", "--models", "claude-not-in-card",
+    pms.main(["compare", "--task", "cortex-pyfix-001", "--models", "claude-not-in-card",
               "--reps", "5", "--dry-run"])
     out = capsys.readouterr().out
     assert "no rate card entry" in out
@@ -294,5 +294,5 @@ def test_an_unpriced_model_still_runs_but_is_flagged(capsys):
 
 def test_unknown_task_lists_the_real_ones():
     with pytest.raises(SystemExit) as e:
-        ams.resolve_task("no-such-task")
+        pms.resolve_task("no-such-task")
     assert "cortex-pyfix-001" in str(e.value)
