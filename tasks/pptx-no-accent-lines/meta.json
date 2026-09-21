@@ -1,0 +1,12 @@
+{
+  "skill": "pptx",
+  "skill_marker": "NEVER use accent lines under titles",
+  "node_modules": ["pptxgenjs"],
+  "allowed_tools_extra": [
+    "Bash(node*)",
+    "Bash(soffice*)",
+    "Bash(ls*)",
+    "Bash(cat*)",
+    "Bash(python*)"
+  ]
+}

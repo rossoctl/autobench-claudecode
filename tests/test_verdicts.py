@@ -280,3 +280,157 @@ def test_docx_brand_arial_black_discriminates_on_docxjs(tmp_path):
         fs.writeFileSync("retention.docx", await Packer.toBuffer(doc));
         """, "retention.docx"), tmp_path / "c")
     assert rc == 0, f"verdict fails a compliant docx-js document:\n{out[-800:]}"
+
+
+# ------------------------------------------------------- pptx-no-accent-lines
+
+THEMES = [("Reliability", "A 99.95% availability target, measured per region."),
+          ("Public API", "One documented surface, versioned, with a deprecation policy."),
+          ("Data residency", "EU residency for customer data, enforced at write time.")]
+
+
+def _deck_with_titles(blank_only=True):
+    """Four slides on blank layouts with plain text boxes -- the pptxgenjs-shaped deck, i.e.
+    the one where `slide.shapes.title` is None and a placeholder-keyed verdict silently
+    measures nothing."""
+    from pptx import Presentation
+    from pptx.util import Inches, Pt
+    prs = Presentation()
+    slides = []
+    for heading, body in [("Platform Roadmap 2027", "Partner briefing")] + THEMES:
+        s = prs.slides.add_slide(prs.slide_layouts[6 if blank_only else 6])
+        tb = s.shapes.add_textbox(Inches(0.5), Inches(0.4), Inches(9), Inches(1.0))
+        tb.text_frame.text = heading
+        tb.text_frame.paragraphs[0].runs[0].font.size = Pt(40)
+        bb = s.shapes.add_textbox(Inches(0.5), Inches(2.2), Inches(9), Inches(2.0))
+        bb.text_frame.text = body
+        bb.text_frame.paragraphs[0].runs[0].font.size = Pt(18)
+        slides.append(s)
+    return prs, slides
+
+
+def build_deck_accent(tmp_path, decoration):
+    """`decoration` is what goes under each title: nothing, an accent rule, a colour band, or
+    an accent rule hidden inside a RESIZED group (the case that needs the child transform)."""
+    from pptx.enum.shapes import MSO_SHAPE
+    from pptx.dml.color import RGBColor
+    from pptx.oxml.ns import qn
+    from pptx.util import Inches
+    prs, slides = _deck_with_titles()
+    for s in slides:
+        if decoration == "clean":
+            pass
+        elif decoration == "line":
+            ln = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0.5), Inches(1.45),
+                                    Inches(4.0), Inches(0.05))
+            ln.fill.solid()
+            ln.fill.fore_color.rgb = RGBColor(0x1F, 0x4E, 0x79)
+            ln.line.fill.background()
+        elif decoration == "band":
+            band = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, 0,
+                                      prs.slide_width, Inches(1.6))
+            band.fill.solid()
+            band.fill.fore_color.rgb = RGBColor(0x1F, 0x4E, 0x79)
+        elif decoration == "grouped":
+            g = s.shapes.add_group_shape()
+            ln = g.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0.5), Inches(1.45),
+                                    Inches(1.5), Inches(0.025))
+            ln.fill.solid()
+            ln.fill.fore_color.rgb = RGBColor(0x1F, 0x4E, 0x79)
+            # Scale the group to 2x its child space: on the slide the rule is 3.0in wide (over
+            # the 25% threshold) while its own .width still reads 1.5in (under it). A verdict
+            # that ignored the transform would call this deck clean.
+            ext = g._element.find(qn("p:grpSpPr")).find(qn("a:xfrm")).find(qn("a:ext"))
+            ext.set("cx", str(Inches(3.0)))
+            ext.set("cy", str(Inches(0.05)))
+        else:
+            raise AssertionError(decoration)
+    out = tmp_path / decoration
+    out.mkdir(parents=True, exist_ok=True)
+    p = out / "roadmap.pptx"
+    prs.save(p)
+    return p
+
+
+@pytest.mark.parametrize("decoration,should_pass", [
+    ("clean", True),      # no decoration at all
+    ("band", True),       # the skill's own remedy ("use whitespace or background color")
+    ("line", False),      # the forbidden thing
+    ("grouped", False),   # the forbidden thing, grouped and the group resized
+])
+def test_pptx_no_accent_lines_discriminates(tmp_path, decoration, should_pass):
+    """Four-way, because both halves of this verdict can fail silently: a geometry test that
+    caught colour bands would fail compliant decks, and one that skipped groups would pass
+    non-compliant ones. "0/3" looks identical in either case."""
+    rc, out = run_verdict("pptx-no-accent-lines",
+                          build_deck_accent(tmp_path, decoration), tmp_path / decoration)
+    assert (rc == 0) == should_pass, (
+        f"{decoration}: expected {'pass' if should_pass else 'fail'}:\n{out[-900:]}")
+
+
+# ------------------------------------------------------- pptx-dark-sandwich
+
+SECURITY = [("Security Program 2027", "All-hands"),
+            ("What we fixed", "SSO everywhere. Secrets out of CI."),
+            ("What we fix next", "Device trust. An audit log."),
+            ("What we need", "Rotate keys quarterly. Review access monthly."),
+            ("Least privilege, everywhere, by default", "The one thing to remember.")]
+
+DARK, LIGHT = (0x11, 0x1B, 0x2E), (0xFF, 0xFF, 0xFF)
+
+
+def build_deck_sandwich(tmp_path, how):
+    """`how`: "inherited" (stock python-pptx, nothing declares a background), "explicit" (slide
+    fills), "backdrop" (a full-bleed rectangle, the pptxgenjs/HTML shape), "theme" (scheme
+    colours through clrMap), or "all-dark" (the skill's OTHER option, which this task rejects).
+    """
+    from pptx import Presentation
+    from pptx.dml.color import MSO_THEME_COLOR, RGBColor
+    from pptx.enum.shapes import MSO_SHAPE
+    from pptx.util import Inches, Pt
+    prs = Presentation()
+    for n, (heading, body) in enumerate(SECURITY, 1):
+        s = prs.slides.add_slide(prs.slide_layouts[6])
+        ends = n in (1, len(SECURITY))
+        dark = ends or how == "all-dark"
+        if how == "explicit" or how == "all-dark":
+            s.background.fill.solid()
+            s.background.fill.fore_color.rgb = RGBColor(*(DARK if dark else LIGHT))
+        elif how == "backdrop":
+            r = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, 0, prs.slide_width,
+                                   prs.slide_height)
+            r.fill.solid()
+            r.fill.fore_color.rgb = RGBColor(*(DARK if dark else LIGHT))
+            r.line.fill.background()
+        elif how == "theme":
+            s.background.fill.solid()
+            # TEXT_1 -> clrMap tx1 -> theme dk1 (black); BACKGROUND_1 -> lt1 (white).
+            s.background.fill.fore_color.theme_color = (
+                MSO_THEME_COLOR.TEXT_1 if dark else MSO_THEME_COLOR.BACKGROUND_1)
+        for top, text, size in [(0.6, heading, 36), (2.4, body, 18)]:
+            tb = s.shapes.add_textbox(Inches(0.6), Inches(top), Inches(8.8), Inches(1.4))
+            tb.text_frame.text = text
+            run = tb.text_frame.paragraphs[0].runs[0]
+            run.font.size = Pt(size)
+            run.font.color.rgb = RGBColor(*(LIGHT if dark else DARK))
+    out = tmp_path / how
+    out.mkdir(parents=True, exist_ok=True)
+    p = out / "security.pptx"
+    prs.save(p)
+    return p
+
+
+@pytest.mark.parametrize("how,should_pass", [
+    ("inherited", False),   # what an unaided run produces: nothing declares a background
+    ("all-dark", False),    # dark throughout is the skill's other option, not this sandwich
+    ("explicit", True),     # slide-level fills
+    ("backdrop", True),     # a full-bleed rectangle at the back of z-order
+    ("theme", True),        # scheme colours, resolved through the master's clrMap
+])
+def test_pptx_dark_sandwich_discriminates(tmp_path, how, should_pass):
+    """Three ways of saying "dark" all have to pass, or the verdict scores the BUILD METHOD
+    rather than the rule -- which is exactly how pptx-size-contrast went wrong."""
+    rc, out = run_verdict("pptx-dark-sandwich",
+                          build_deck_sandwich(tmp_path, how), tmp_path / how)
+    assert (rc == 0) == should_pass, (
+        f"{how}: expected {'pass' if should_pass else 'fail'}:\n{out[-900:]}")
