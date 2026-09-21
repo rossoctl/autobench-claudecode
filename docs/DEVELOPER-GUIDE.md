@@ -8,9 +8,12 @@ here:
 
 | Document | Covers |
 |---|---|
-| `README.md` | why the design is shaped this way, and the headline findings |
-| `results/EVALUATION.md` | the study itself — results, statistics, limitations |
-| this file | the data path, the contracts, the invariants, how to extend it |
+| [`README.md`](../README.md) | why the design is shaped this way, and the headline findings |
+| [`results/EVALUATION.md`](../results/EVALUATION.md) | the study itself — results, statistics, limitations |
+| this file (`docs/DEVELOPER-GUIDE.md`) | the data path, the contracts, the invariants, how to extend it |
+
+Every path below is relative to the **repository root**, not to `docs/` — so `harness.py`
+means `../harness.py` from here, and commands are written to be run from the root.
 
 **Contents**
 
