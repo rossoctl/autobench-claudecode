@@ -71,6 +71,10 @@ ALLOWED_TOOLS = "Read Edit Write Bash(python*) Bash(pytest*)"
 # run-to-run comparisons would drift silently. --model beats both env and settings, and
 # `model_pin_honoured` below checks on the wire that it really did.
 DEFAULT_MODEL = "claude-sonnet-4-6"
+# Node packages whose versions go into every row: the two the format skills mandate. A
+# whitelist for the same reason EVENT_KEEP is one -- the rest of a global npm install is the
+# user's own software inventory and scores nothing here.
+NODE_PKGS_TRACKED = ("docx", "pptxgenjs")
 
 # Fields safe to persist. Everything else in an event is dropped, content included.
 EVENT_KEEP = ("at", "requestId", "sessionId", "host", "phase", "direction",
@@ -262,7 +266,70 @@ def load_task(task_dir):
             # which DOES see model-selected skills (unlike explicit /skill-name).
             "mode": meta.get("mode") or "compliance",
             "expected_skill": meta.get("expected_skill"),
-            "candidate_skills": meta.get("candidate_skills") or []}
+            "candidate_skills": meta.get("candidate_skills") or [],
+            # Node packages this task's library path needs, linked into every workspace from
+            # the global install. MEASURED, not assumed: `npm install docx` through the Cortex
+            # proxy dies with "502 Bad Gateway -- response body too large" on the registry
+            # metadata, so a task that expects the agent to install its own library measures
+            # npm failing. See link_node_modules.
+            "node_modules": meta.get("node_modules") or []}
+
+
+@functools.cache
+def node_apparatus():
+    """The Node toolchain, for the same reason the venv is recorded: it runs the artifact.
+
+    The docx skill mandates docx-js, so on that path `node` and `docx@9.7.1` are as much the
+    instrument as `openpyxl` is on the xlsx path -- docx-js defaults to A4, which is the very
+    thing one task asserts about, and a major version could change it. Recorded on every row,
+    like the venv, because a field that appears only on some rows is a field nobody filters on.
+
+    A WHITELIST of packages, not the whole global install, for the reason EVENT_KEEP is a
+    whitelist: everything else installed globally is the user's own software inventory and
+    scores nothing here.
+    """
+    def cmd(*args):
+        try:
+            r = subprocess.run(args, capture_output=True, text=True, timeout=60)
+            return r.stdout.strip() if r.returncode == 0 else None
+        except (OSError, subprocess.SubprocessError):
+            return None
+    ver, root = cmd("node", "--version"), cmd("npm", "root", "-g")
+    pkgs = {}
+    for name in NODE_PKGS_TRACKED:
+        p = pathlib.Path(root) / name / "package.json" if root else None
+        try:
+            pkgs[name] = json.loads(p.read_text())["version"] if p and p.is_file() else None
+        except (OSError, ValueError, KeyError):
+            pkgs[name] = None
+    return {"node_version": (ver or "").lstrip("v") or None, "node_packages": pkgs}
+
+
+def link_node_modules(ws, names):
+    """Symlink globally-installed Node packages into the workspace's node_modules.
+
+    A symlink rather than a copy because both `require('docx')` and `import from 'docx'`
+    resolve through it, whereas NODE_PATH is honoured by CommonJS only -- an agent that
+    happens to write ESM would fail for a reason that has nothing to do with the skill.
+    Fails loudly if the package is absent: silently falling back to python-docx is exactly
+    the confound the docxjs-* tasks exist to remove.
+    """
+    if not names:
+        return
+    root = subprocess.run(["npm", "root", "-g"], capture_output=True, text=True, timeout=60)
+    gdir = pathlib.Path(root.stdout.strip()) if root.returncode == 0 else None
+    nm = pathlib.Path(ws) / "node_modules"
+    nm.mkdir(exist_ok=True)
+    for name in names:
+        src = gdir / name if gdir else None
+        if not src or not src.is_dir():
+            sys.exit(f"task needs Node package {name!r}, which is not installed globally. "
+                     f"The proxied child cannot fetch it (npm registry metadata trips "
+                     f"Cortex's body-size limit), so install it on the host first: "
+                     f"npm install -g {name}")
+        tgt = nm / name
+        if not tgt.exists():
+            tgt.symlink_to(src)
 
 
 IGNORE = shutil.ignore_patterns("__pycache__", ".pytest_cache", "*.pyc", ".venv", "venv")
@@ -528,6 +595,7 @@ def assemble_skill(skill, dest, variant=None):
 def run_rep(task, rep, cfg_dir, model=DEFAULT_MODEL, arm="on", timeout=1800,
             skill_variant=None):
     ws = fresh_ws(task)
+    link_node_modules(ws, task.get("node_modules"))
     before_tests = test_hashes(ws)
     if task.get("mode") == "selection" and not task.get("verdict"):
         # Selection tasks are scored from the transcript, not from a test suite, so an
@@ -717,6 +785,9 @@ def run_rep(task, rep, cfg_dir, model=DEFAULT_MODEL, arm="on", timeout=1800,
         # On the ON arm this is the independent variable, so a row without it is a row whose
         # treatment is only recoverable from a file mtime.
         **skill_apparatus(cfg_dir, skill_variant),
+        # The other library path. docx-js defaults to A4 -- the exact thing docxjs-us-letter
+        # asserts about -- so its version is inside the measurement, not beside it.
+        **node_apparatus(),
         # Client-side timing, from the CLI's result event. `cli_duration_api_ms` is the
         # latency measure; wall_seconds includes local tool execution and machine load.
         **result_fields(tr.get("result")),

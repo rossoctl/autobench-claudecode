@@ -13,7 +13,9 @@ STRICT, because a contributor running pytest is about to add rows to a frozen gr
 import inspect
 import json
 import pathlib
+import re
 import sys
+import types
 
 import pytest
 
@@ -256,3 +258,58 @@ def test_the_manifest_stores_digests_not_skill_text():
     for rec in json.loads(body)["skills"].values():
         for digest in rec["prose"].values():
             assert len(digest) == 64 and int(digest, 16) >= 0
+
+
+# --------------------------------------------------------------- the node toolchain
+
+def test_node_packages_are_a_whitelist():
+    """The rest of a global npm install is the user's own software inventory. Same rule as
+    EVENT_KEEP: persist what scores something, not what happens to be reachable."""
+    ap = harness.node_apparatus()
+    assert set(ap["node_packages"]) == set(harness.NODE_PKGS_TRACKED)
+    assert set(ap) == {"node_version", "node_packages"}
+
+
+def test_the_docxjs_library_is_recorded_because_it_sets_the_default_under_test():
+    """docx-js defaults to A4, which is the exact property docxjs-us-letter asserts about --
+    so its version is inside the measurement, not beside it."""
+    ap = harness.node_apparatus()
+    if ap["node_packages"]["docx"] is None:
+        pytest.skip("docx not installed globally")
+    assert re.fullmatch(r"\d+\.\d+\.\d+", ap["node_packages"]["docx"])
+
+
+def test_run_rep_persists_the_node_toolchain():
+    assert "**node_apparatus()" in inspect.getsource(harness.run_rep)
+
+
+def test_a_missing_node_package_fails_loudly(tmp_path, monkeypatch):
+    """Silently falling back to python-docx is exactly the confound the docxjs-* tasks were
+    written to remove -- so a missing library must stop the run, not change the library."""
+    monkeypatch.setattr(harness.subprocess, "run",
+                        lambda *a, **k: types.SimpleNamespace(returncode=0,
+                                                             stdout=str(tmp_path / "none")))
+    with pytest.raises(SystemExit, match="npm install -g"):
+        harness.link_node_modules(str(tmp_path), ["docx"])
+
+
+def test_linked_packages_resolve_for_both_esm_and_import(tmp_path):
+    """A symlink, not NODE_PATH: NODE_PATH is honoured by CommonJS only, so an agent that
+    happened to write ESM would fail for a reason unrelated to the skill."""
+    if harness.node_apparatus()["node_packages"]["docx"] is None:
+        pytest.skip("docx not installed globally")
+    harness.link_node_modules(str(tmp_path), ["docx"])
+    link = tmp_path / "node_modules" / "docx"
+    assert link.is_symlink() and (link / "package.json").is_file()
+
+
+def test_every_declared_node_package_is_tracked():
+    """A task may only depend on a library whose version lands in the row."""
+    for d in sorted((ROOT / "tasks").iterdir()):
+        meta = d / "meta.json"
+        if not meta.is_file():
+            continue
+        for name in json.loads(meta.read_text()).get("node_modules") or []:
+            assert name in harness.NODE_PKGS_TRACKED, (
+                f"{d.name} depends on Node package {name!r}, which no row records -- add it "
+                f"to harness.NODE_PKGS_TRACKED")

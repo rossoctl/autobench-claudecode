@@ -303,6 +303,24 @@ def doctor_checks():
                        f"results/; re-freeze and treat it as a new instrument" if drift else "")
                     + (f" -- UNPINNED {unpinned}" if unpinned else "")))
 
+    # The other library path. The docx skill mandates docx-js, and the proxied child CANNOT
+    # install it: npm registry metadata trips Cortex's response-body limit ("502 Bad Gateway --
+    # response body too large"). So it has to be on the host, and a task that declares it and
+    # cannot find it is unmeasurable rather than merely awkward -- it would silently measure
+    # python-docx, which satisfies the skill's rules by default.
+    nap = harness.node_apparatus()
+    wanted = set()
+    for d in sorted((ROOT / "tasks").iterdir()):
+        if (d / "prompt.md").exists():
+            wanted.update(task_meta(d).get("node_modules") or [])
+    absent = sorted(n for n in wanted if not nap["node_packages"].get(n))
+    out.append(((BLOCK if absent else OK if nap["node_version"] else WARN), "node toolchain",
+                (f"node {nap['node_version']}" if nap["node_version"] else "node NOT FOUND")
+                + "  " + ", ".join(f"{k}={v or '<absent>'}"
+                                   for k, v in nap["node_packages"].items())
+                + (f" -- tasks need {absent}: install with npm install -g {' '.join(absent)}"
+                   if absent else "")))
+
     lock = harness.OUT / ".harness.lock"
     held = False
     if lock.exists():
