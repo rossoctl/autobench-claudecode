@@ -23,6 +23,7 @@ Two deliberate anti-footgun choices:
 import argparse
 import datetime as dt
 import fcntl
+import functools
 import hashlib
 import json
 import os
@@ -357,6 +358,39 @@ def result_fields(res):
     return out
 
 
+@functools.cache
+def apparatus():
+    """What MEASURED this repetition, as distinct from what was measured.
+
+    The venv is not an observer of the experiment, it is inside it: it runs the verdict that
+    decides passed/failed, and its bin/ is prepended to the child's PATH, so the agent under
+    test can reach these same libraries. A rebuilt venv can therefore move a pass rate with no
+    model involved -- and without these fields that movement is indistinguishable, in the rows,
+    from a model regression. .python-version and requirements.lock pin the apparatus; this
+    records what was ACTUALLY used, which is the only version that can be checked afterwards.
+
+    Two interpreters, deliberately separate keys: `py_driver` runs this file and only does
+    arithmetic over NDJSON (any 3.12+ gives identical output), `py_venv` runs the verdict.
+
+    Cached -- it cannot change inside a run, so this is one subprocess per harness invocation.
+    """
+    ver = None
+    try:
+        ver = subprocess.run(
+            [VENV_PY, "-c", "import sys;print('%d.%d.%d' % sys.version_info[:3])"],
+            capture_output=True, text=True, timeout=30).stdout.strip() or None
+    except Exception:
+        pass       # a missing venv is already fatal elsewhere; never fail a rep for metadata
+    pkgs = {}
+    for d in sorted(VENV.glob("lib/python*/site-packages/*.dist-info")):
+        name, _, v = d.name[: -len(".dist-info")].rpartition("-")
+        # pip/setuptools/wheel are venv plumbing, not instruments -- they score nothing.
+        if name and name.lower() not in ("pip", "setuptools", "wheel"):
+            pkgs[name.lower().replace("_", "-")] = v
+    return {"py_driver": "%d.%d.%d" % sys.version_info[:3], "py_venv": ver,
+            "venv_packages": pkgs}
+
+
 # ---------------------------------------------------------------- one repetition
 
 def run_rep(task, rep, cfg_dir, model=DEFAULT_MODEL, arm="on", timeout=1800):
@@ -543,6 +577,9 @@ def run_rep(task, rep, cfg_dir, model=DEFAULT_MODEL, arm="on", timeout=1800):
         "tests_untouched": tests_untouched,
         "child_exit": r.returncode, "timed_out": timed_out,
         "wall_seconds": round(wall, 1),
+        # What measured this row: the verdict interpreter and libraries, pinned by
+        # .python-version and requirements.lock. A rebuilt venv is a changed instrument.
+        **apparatus(),
         # Client-side timing, from the CLI's result event. `cli_duration_api_ms` is the
         # latency measure; wall_seconds includes local tool execution and machine load.
         **result_fields(tr.get("result")),

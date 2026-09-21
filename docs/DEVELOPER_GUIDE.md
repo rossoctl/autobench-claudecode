@@ -123,7 +123,8 @@ one of the 193 published repetitions was measured on **3.14.3 with pytest 9.1.1 
 3.1.5** — the venv was created one minute before the first recorded row and never rebuilt — so
 that is what `.python-version` records. Rebuilding it on a different interpreter or a newer
 openpyxl is a change to the instrument, and a verdict that flips for that reason is
-indistinguishable, in the rows, from a model that got worse.
+indistinguishable, in the rows, from a model that got worse — which is why every row now records
+the apparatus it was measured with (§12).
 
 `requirements.txt` states the *intent* (`openpyxl>=3.1`) and is the file to edit;
 `requirements.lock` states the *apparatus* (`openpyxl==3.1.5`, with hashes) and is the file to
@@ -438,10 +439,11 @@ developer-facing entry points and are documented in §10.
 | `profile.py` | the model grid: `--run` invokes, `--report` recompiles from stored runs with no invocations, `--freeze` publishes membership |
 | `pricing.py` | the internal LiteLLM rate card, hand-maintained on purpose |
 | `lib_child.py` | builds the sanitized child environment |
+| `.python-version`, `requirements.lock` | the pinned apparatus: 3.14.3 and the verdict libraries that scored the grid (§2.2) |
 | `tasks/` | 7 active tasks |
 | `tasks-retired/` | 9 discarded tasks, each with a `DISCARDED.md` stating why. **A discarded task is a result** |
 | `tools/` | task generators plus the controls and analysis tools |
-| `tests/` | 48 tests guarding the confound detector, workspace setup, the result-event whitelist and the CLI's reporting |
+| `tests/` | 55 tests guarding the confound detector, workspace setup, the result-event whitelist, the apparatus pins and the CLI's reporting |
 | `results/` | `EVALUATION.md`, the frozen manifest, the cost-profile artifacts, the generated deck |
 | `out/` | **gitignored.** Per-run NDJSON and the raw SSE capture, which contains full prompts |
 | `out/modelskill/` | where the CLI writes by default — outside `profile.RUN_DIRS`, so consumer runs cannot join the published grid |
@@ -859,7 +861,7 @@ it. Cortex must be reachable either way — session API on `127.0.0.1:47601`, pr
 | `.venv/bin/python tools/cost_significance.py` | which cost gaps are established |
 | `.venv/bin/python tools/stability_probe.py --task <id>` | which cells reproduce across sessions |
 | `.venv/bin/python tools/make_summary_deck.py` | regenerate the deck |
-| `.venv/bin/python -m pytest -q` | 48 tests |
+| `.venv/bin/python -m pytest -q` | 55 tests |
 
 `harness.py` flags: `--reps`, `--out` (default `out/runs`), `--arm {on,off,select}`,
 `--model`.
@@ -953,6 +955,26 @@ sub-objects across CLI versions. Absent (timed out, killed, or an older CLI) mea
 is present and `None`, never 0. Rows recorded before this was persisted have no `cli_*` fields
 at all, and the report renders that as a dash.
 
+**Apparatus** — `py_driver`, `py_venv`, `venv_packages`
+
+What *measured* the row, as opposed to what was measured (`harness.apparatus()`). Two separate
+interpreter fields because they answer different questions: `py_driver` runs `harness.py` and
+only does arithmetic, so any 3.12+ value is equivalent, while `py_venv` runs the verdict and is
+also what the child finds on its `PATH`. `venv_packages` is every installed distribution and
+version except pip/setuptools/wheel, which score nothing.
+
+This group exists because a rebuilt venv is a **changed instrument**, not a changed tool: bump
+`openpyxl` and an xlsx compliance verdict can flip with no model involved. Without these fields
+that movement is indistinguishable in the rows from a model regression — the same class of
+mistake as reading a cold-cache re-tiering as a cost change (§8). `.python-version` and
+`requirements.lock` pin the apparatus (§2.2); this records what was actually used, which is the
+only version anyone can check afterwards. Versions only, no paths — a venv path names a machine
+and a user account.
+
+⚠️ The 193 published repetitions **predate these fields**, so they carry no apparatus block.
+What measured them is recorded in §2.2 instead, recovered from the venv's creation time: 3.14.3,
+pytest 9.1.1, openpyxl 3.1.5, one apparatus throughout.
+
 ---
 
 ## 13. Invariants
@@ -983,6 +1005,12 @@ Each of these prevents a failure that actually happened.
     One ad-hoc canary repetition landing in it moved a published cell from n=10 to n=11 and
     changed its median. The CLI defaults to `out/modelskill` for this reason, and a test pins
     it there.
+15. **The venv is apparatus, so pin it and record it.** `.python-version` (3.14.3) and
+    `requirements.lock` pin what runs the verdict and what the child finds on its `PATH`; every
+    row carries `py_venv` and `venv_packages` so a rebuilt venv cannot masquerade as a model
+    regression. `tests/test_apparatus.py` fails if the installed venv has drifted from either
+    pin — strictly, because a contributor is about to produce rows that will be compared
+    against the frozen grid.
 
 ---
 
