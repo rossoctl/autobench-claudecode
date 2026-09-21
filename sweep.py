@@ -24,7 +24,13 @@ def main():
     ap.add_argument("--reps", type=int, default=3)
     ap.add_argument("--pattern", default="xlsx-*")
     ap.add_argument("--model", default="claude-sonnet-4-6")
+    # Passed straight through to the harness. The run LOCK stays at OUT/.harness.lock whatever
+    # this is set to, so a different output directory isolates the ROWS without letting two
+    # runs overlap -- which would make the time-window correlation attribute one run's
+    # inference events to the other.
+    ap.add_argument("--out", default=str(OUT / "runs"))
     a = ap.parse_args()
+    out = pathlib.Path(a.out)
 
     tasks = sorted(p for p in (ROOT / "tasks").glob(a.pattern) if p.is_dir())
     print(f"arm={a.arm} reps={a.reps} model={a.model} tasks={[t.name for t in tasks]}\n")
@@ -33,10 +39,11 @@ def main():
     for t in tasks:
         r = subprocess.run(
             [sys.executable, "-u", str(ROOT / "harness.py"), str(t),
-             "--reps", str(a.reps), "--arm", a.arm, "--model", a.model],
+             "--reps", str(a.reps), "--arm", a.arm, "--model", a.model,
+             "--out", str(out)],
             capture_output=True, text=True, timeout=7200)
         slug = re.sub(r"[^a-z0-9]+", "-", a.model.lower()).strip("-")
-        latest = sorted(glob.glob(str(OUT / "runs" / f"{t.name}-{a.arm}-{slug}-*.ndjson")))
+        latest = sorted(glob.glob(str(out / f"{t.name}-{a.arm}-{slug}-*.ndjson")))
         if not latest:
             print(f"  {t.name:28} NO OUTPUT (exit={r.returncode})")
             print("   " + r.stdout.strip()[-400:])
@@ -77,9 +84,11 @@ def main():
                        else "  <== keep" if r["pass"] == 0
                        else "  <== marginal (partial pass unaided)")
         print(f"  {r['task']:28} {r['pass']}/{r['n']}{verdict}")
-    OUT.mkdir(parents=True, exist_ok=True)
+    out.mkdir(parents=True, exist_ok=True)
     slug = re.sub(r"[^a-z0-9]+", "-", a.model.lower()).strip("-")
-    pathlib.Path(OUT / f"sweep-{a.arm}-{slug}.json").write_text(
+    # Beside the rows it summarizes, not in OUT -- otherwise two output directories share one
+    # summary file and the second sweep silently overwrites the first one's verdicts.
+    (out / f"sweep-{a.arm}-{slug}.json").write_text(
         json.dumps([{k: (sorted(v) if isinstance(v, set) else v) for k, v in r.items()}
                     for r in rows], indent=2))
 
