@@ -1,0 +1,12 @@
+{
+  "skill": "docx",
+  "skill_marker": "Never use unicode bullets",
+  "node_modules": [
+    "docx"
+  ],
+  "allowed_tools_extra": [
+    "Bash(node*)",
+    "Bash(ls*)",
+    "Bash(cat*)"
+  ]
+}
