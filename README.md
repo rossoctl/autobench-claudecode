@@ -114,10 +114,10 @@ Measured across 22 tasks and three skills:
 |---|---|---|
 | `xlsx` | investment-banking colour coding (blue = hardcoded input) | **discriminates** 0/3 → 3/3 |
 | `xlsx` | professional font, no formula errors | **discriminates** 0/3 → 3/3 |
-| `docx` | Arial 12pt body, black heading text | **1/6 unaided** — Arial every time, but 11pt in 4 of 6 and headings in `1A1A1A`/`0057FF` in 3 of 6 |
-| `pptx` | no accent lines under titles | **1/3 unaided** — it draws 0.03in bars under titles unprompted |
-| `pptx` | dark title + closing slides, light content ("sandwich") | **0/3 unaided** — all five slides came out `#0D1B2A`, three times out of three |
-| `docx` | DXA table widths, with docx-js forced | **1/3 unaided** — `w:type="pct"` in 2 of 3 |
+| `pptx` | dark title + closing slides, light content ("sandwich") | **discriminates** 0/3 → 3/3 — at 5× the cost, and every ON rep spawned a subagent |
+| `docx` | Arial 12pt body, black heading text | **does not discriminate** 0/6 → 0/3 — the skill moves heading colour *further* from black (`1F3864`, `1A1A2E`) |
+| `docx` | DXA table widths, with docx-js forced | **1/6 unaided** — `w:type="pct"` in 5 of 6; ON arm not yet bought |
+| `pptx` | no accent lines under titles | **2/6 unaided** — it draws 0.03in bars under titles unprompted; ON arm not yet bought |
 | `xlsx` | `$#,##0` / `0.0%` / `0.0x`; assumptions as cell refs | passes unaided — discarded |
 | `docx` | real bullets, US Letter (both libraries, then docx-js forced) | passes unaided — discarded |
 | `pptx` | size hierarchy, non-text-only slides | passes unaided — discarded |
@@ -148,6 +148,16 @@ Skill-on cost, same tasks, same model:
 | `xlsx` | 167k → 185k (+10%) | 82s → 80s | **0/3 → 3/3** |
 | `docx` | 160k → 1.03M (**6.5×**) | 27s → 501s (**18×**) | none (both pass) |
 | `pptx` | 164k → **bimodal, see below** | 32s → 235s (**7.4×**) | none (both pass) |
+| `docx` on `brand-arial-black` | 261k → 318k (**1.2×**) | 42s → 48s | none (**0/6 → 0/3**) |
+| `pptx` on `dark-sandwich` | 208k → 2.18M (**10.5×**) | 133s → 562s (**4.2×**) | **0/3 → 3/3** |
+
+The last two rows are each measured against *their own* control arm on one task, which the three
+above are not. They are the cleaner comparison, and they say the overhead is a property of how a
+given skill is written: the docx skill charges 1.2× and changes nothing, while the pptx skill
+charges 10.5× and converts every repetition. All three `dark-sandwich` ON reps landed in the high
+mode below, and all three spawned an `Agent` — so that figure is the cost of the skill's whole QA
+apparatus, not of stating a rule. See
+[`results/docx-pptx-onarm-20260922.md`](results/docx-pptx-onarm-20260922.md).
 
 ⚠️ **`pptx` has no single honest overhead number, and two earlier attempts to give one were
 wrong.** It was first published as 18×, then corrected to 3.0×. Both were artifacts of

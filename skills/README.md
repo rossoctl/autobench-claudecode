@@ -85,10 +85,25 @@ half-applied edit is worse than a failed run — it still produces rows:
 | Variant | Hypothesis |
 |---|---|
 | `docx-v2` | the docx rules are stated only *inside* docx-js snippets, so on the python-docx path the model never applies them. Hoists page size, margins, Arial 12pt body, black headings, native numbering and absolute table widths to the top as properties of the **document**, in the shape of the xlsx skill — the one skill that measured as effective. |
-| `pptx-v2` | two changes: state the two scored rules up front, and **bound the QA loop** — "⚠️ USE SUBAGENTS" (no subagent exists here, and one would be a `subagent_invoked` confound) and the open-ended "repeat until a full pass reveals no new issues" become a single render-and-check cycle. That makes *what the QA wording costs* a result about skill authoring rather than about a model. |
+| `pptx-v2` | two changes: state the two scored rules up front, and **bound the QA loop** — "⚠️ USE SUBAGENTS" and the open-ended "repeat until a full pass reveals no new issues" become a single render-and-check cycle. That makes *what the QA wording costs* a result about skill authoring rather than about a model. |
 
 Both restate rules the installed skill already contains; neither adds a rule of ours. That is the
 line a variant must not cross, or `as-installed` vs `v2` stops being a presentation experiment.
+
+Both hypotheses have since been measured on the `as-installed` arm, and both survived — which is
+why the variants are worth running:
+
+- **docx:** `docx-brand-arial-black` went 0/6 unaided → **0/3 with the skill on the wire**, and the
+  heading colour moved *away* from black (`1F3864`, `1A1A2E`). The rule is in the text; the model
+  does not apply it.
+- **pptx:** the QA loop is real and it dominates. `pptx-dark-sandwich` ON ran **34 LLM calls and
+  2.18M tokens against a 5-call, 208k control** — and the subagent instruction executed. This
+  corrects an assumption stated when `pptx-v2` was written: **`--allowedTools` does not block
+  `Agent`**, so "no subagent exists here" was wrong, and every ON repetition was flagged
+  `subagent_invoked`. The confound is exactly why the ON number cannot be split into rules-vs-loop
+  without this variant.
+
+See [`../results/docx-pptx-onarm-20260922.md`](../results/docx-pptx-onarm-20260922.md).
 
 Get the `base` digest with:
 
