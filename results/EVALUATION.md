@@ -1,7 +1,7 @@
 # AutoBench for Claude Code — Evaluation
 
 **Date:** 2026-09-09 · **Subject under test:** Claude Code (`claude` CLI 2.1.257)
-**Gateway:** internal ETE LiteLLM · **Repetitions recorded:** 209 (149 in the cost grid: 18 cells
+**Gateway:** IBM Research's ETE LiteLLM (an enterprise deployment we are a tenant of, not a Red Hat service) · **Repetitions recorded:** 209 (149 in the cost grid: 18 cells
 at n=5, 2 discriminator cells at n≈30), plus 12 in the two cross-session stability probes of §7.3.2
 that are deliberately kept out of the grid ·
 **Skill measured:** `xlsx`
@@ -175,7 +175,13 @@ the only durable record.
 
 ---
 
-## 5. Model pricing (internal LiteLLM, 2026-09-09)
+## 5. Model pricing (IBM Research ETE LiteLLM, 2026-09-09)
+
+**Whose gateway.** Every repetition was served by **IBM Research's ETE deployment of LiteLLM** —
+an enterprise organization's internal gateway that this project is a tenant of, not a Red Hat
+service. The rates below are therefore an enterprise arrangement rather than a public price list,
+and they are external state: the model set and the rates can change from the other side without
+notice, which is what §5's staleness check exists for.
 
 **Provenance.** The rate card in `pricing.py` was transcribed by hand from the gateway's model
 pages (`/ui/?page=models`) on **2026-09-09**, and every figure below was computed from it.
@@ -186,12 +192,15 @@ pages (`/ui/?page=models`) on **2026-09-09**, and every figure below was compute
 > client-side — and wrong about the *API*: the gateway serves
 > `GET /public/litellm_model_cost_map` with **no credential at all**. `prices.json` now pins
 > that map for the four models priced here (`tools/fetch_prices.py`, `--check` for drift).
-> **No number in this evaluation moves:** the map publishes upstream list rates, the gateway
-> charges exactly **0.76×** them across all four models and both directions, and 0.76 × list
-> reproduces the table below to the cent. That factor is *inferred from that agreement, not
-> read* — `/config/cost_margin_config` would state it and is `403` for a key scoped to
-> `['llm_api_routes']` — which is why the hand card stays in the repo as the independent
-> witness the snapshot is tested against.
+> **No number in this evaluation moves.** What that map publishes is the *upstream provider's
+> list* rates, not what we pay: the gateway bills below list, by the same proportion for every
+> model and both directions, and scaling list by that proportion reproduces the table below to
+> the cent. The proportion is not stated in this repository — it is a term of that organization's
+> arrangement, not a result of this study, and nothing computed here needs it named. Even its
+> uniformity is *inferred from the agreement of the two cards, not read*:
+> `/config/cost_margin_config` would state it and is `403` for a key scoped to
+> `['llm_api_routes']`. That is why the hand card stays as the independent witness the snapshot
+> is tested against.
 
 | Benchmarked alias | Gateway entry | Input $/1M | Output $/1M | Output:input |
 |---|---|---|---|---|

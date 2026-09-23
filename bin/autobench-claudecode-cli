@@ -321,8 +321,8 @@ def doctor_checks():
                     disagree.append(f"{m}:{d} snapshot {snap[d]} vs card {hand[d]}")
     stale = pricing.staleness_warning()
     out.append(((WARN if (disagree or stale) else OK), "rate card",
-                (f"prices.json fetched {pricing.SNAP['fetched']}, x{pricing.MARGIN} reproduces "
-                 f"the hand card for {len(pricing.PRICES)} models"
+                (f"prices.json fetched {pricing.SNAP['fetched']}, scales to the billed card "
+                 f"for {len(pricing.SNAP['rates'])}/{len(pricing.PRICES)} models"
                  if pricing.SNAP else
                  f"prices.json absent -- hand card only, dated {pricing.SOURCE_DATE}; run "
                  f"tools/fetch_prices.py")
@@ -434,10 +434,12 @@ def cmd_models(a):
               f"$ANTHROPIC_BASE_URL{pricing.SNAP['source']}")
         print(f"            (unauthenticated). Refresh or drift-check with "
               f"tools/fetch_prices.py [--check].")
-        print(f"margin    : the map lists UPSTREAM rates; this gateway charges x{pricing.MARGIN} of")
-        print( "            them, uniform across all models and both directions. INFERRED from")
-        print( "            agreement with the hand-transcribed card, not read -- the endpoint that")
-        print( "            would state it is 403 for a key scoped to ['llm_api_routes'].")
+        print( "billing   : the snapshot lists the UPSTREAM provider's rates. The gateway -- IBM")
+        print( "            Research's ETE LiteLLM, an enterprise deployment we are a tenant of --")
+        print( "            bills BELOW them, by the same proportion for every model and both")
+        print( "            directions. The proportion is not recorded in this repo (it is that")
+        print( "            organization's arrangement, and nothing here needs it named); it is")
+        print( "            recomputed from the two cards at load and checked for uniformity.")
     else:
         print(f"dated     : {pricing.SOURCE_DATE} -- prices.json absent, so the hand-transcribed")
         print( "            card is the only source; run tools/fetch_prices.py to pin the map")

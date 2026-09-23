@@ -246,11 +246,19 @@ autobench-claudecode-cli models             # aliases, the rate card, and its da
 scenarios. Any `--model` string is accepted; one absent from the card reports no cost column
 and still reports volume and latency.
 
-The card has **two** sources on purpose. `pricing.PRICES` is the hand transcription of the
-gateway's model pages; `prices.json` is a pinned snapshot of
-`GET /public/litellm_model_cost_map`, which the gateway serves **unauthenticated**, times an
-inferred `MARGIN = 0.76` (the map lists upstream rates; the gateway charges 0.76× them, uniform
-across all four models and both directions). Refresh or drift-check the snapshot with:
+**Whose gateway this is.** The runs go through **IBM Research's ETE deployment of LiteLLM** — an
+enterprise organization's internal gateway we are a tenant of, not a Red Hat service. Treat its
+rate card, its model set and its availability as external state that can change without notice,
+which is why all three are pinned and checked rather than assumed.
+
+The card has **two** sources on purpose. `pricing.PRICES` is the hand transcription of what the
+gateway bills *us*; `prices.json` is a pinned snapshot of `GET /public/litellm_model_cost_map`,
+which the gateway serves **unauthenticated** and which carries the **upstream provider's list**
+rates. The gateway bills below list, by the same proportion for every model and both directions —
+**the proportion is deliberately not recorded in this repo**, and no constant holds it: `rates()`
+scales each model's cache tiers by that model's own billed/list ratio, recomputed at load. So the
+uniformity is a property the code checks, not a magic number it carries. Refresh or drift-check the
+snapshot with:
 
 ```bash
 python3 tools/fetch_prices.py            # rewrite prices.json
@@ -259,12 +267,13 @@ python3 tools/fetch_prices.py --check    # exit 1 on drift, write nothing
 
 Two traps worth knowing before you touch either. **The endpoint is not byte-stable** — four
 fetches seconds apart returned three payload sizes, so a digest of the document reports drift
-every time; the snapshot pins *fields for named models* instead. And the margin is **inferred
-from agreement, never read**: `/config/cost_margin_config`, `/model/info`, `/spend/calculate`
-and `/cost/estimate` are all `403` for a virtual key scoped to `['llm_api_routes']`. That is
-why the hand card stays — it is the independent witness, and `tests/test_pricing.py` fails if
-the two sources disagree. `doctor` carries a `rate card` row (WARN) for the offline half of
-that check plus staleness.
+every time; the snapshot pins *fields for named models* instead. And even the uniformity is
+**inferred from agreement, never read**: `/config/cost_margin_config`, `/model/info`,
+`/spend/calculate` and `/cost/estimate` are all `403` for a virtual key scoped to
+`['llm_api_routes']`. That is why the hand card stays — it is the independent witness, and
+`tests/test_pricing.py` fails if the two sources disagree. `doctor` carries a `rate card` row
+(WARN) for the offline half of that check plus staleness, and `fetch_prices.py --show-ratios`
+prints the ratios to the terminal, never to disk, if you ever need to diagnose a non-uniform one.
 
 ### 3.3 Run one cell
 

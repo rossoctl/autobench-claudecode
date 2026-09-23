@@ -235,7 +235,14 @@ python3 tools/stability_probe.py     # which cells reproduced across sessions (p
 
 ### Monetary cost
 
-`pricing.py` holds the internal LiteLLM rate card. It began as a hand transcription of the
+The gateway these runs go through is **IBM Research's ETE deployment of LiteLLM** — an enterprise
+organization's internal gateway that we are a tenant of, not a Red Hat service. Two consequences
+worth stating before any dollar figure: the rates we are billed are an enterprise arrangement
+rather than a public price, and the model set, the rates and the availability can all change from
+the other side without notice. That is why the card below is pinned, dated and staleness-checked
+instead of assumed.
+
+`pricing.py` holds that rate card. It began as a hand transcription of the
 gateway's model pages (`/ui/?page=models`), which are behind an interactive web-authorization flow
 and render client-side — from which this README previously concluded that there was nothing for a
 benchmark credential to read. **That was true of the UI and wrong about the API:** the gateway
@@ -247,13 +254,17 @@ python3 tools/fetch_prices.py            # rewrite prices.json
 python3 tools/fetch_prices.py --check    # exit 1 on drift, write nothing
 ```
 
-The map publishes **upstream list** rates; the gateway charges **0.76×** those, uniformly across
-all four models and both directions (8 of 8 ratios agree to four decimals). That factor is
-*inferred from agreement, not read*: `/config/cost_margin_config` would state it and is `403` for a
-key scoped to `['llm_api_routes']`. So the hand-transcribed `PRICES` stays in the repo as the
-independent witness the derived rates are checked against, and `tests/test_pricing.py` fails if the
-two ever disagree. The snapshot is apparatus, pinned for the same reason as `requirements.lock`: a
-published cost figure must not change because it was re-analysed on a day the upstream map moved.
+What that map publishes is the **upstream provider's list** rates — not what we pay. **The gateway
+bills less than list,** by the same proportion for every model and both directions. The proportion
+itself is not recorded anywhere in this repo: it is a term of that organization's arrangement, not
+a result of ours, and nothing here needs it named. Cache tiers are scaled by each model's own
+billed/list ratio, recomputed at load and checked for uniformity, so there is no stored factor to
+go stale or to leak — a disagreement between the two cards surfaces as a test failure instead.
+
+The hand-transcribed `PRICES` therefore stays, and stays authoritative for the in/out dollars every
+published figure was computed from. The snapshot is apparatus, pinned for the same reason as
+`requirements.lock`: a published cost figure must not change because it was re-analysed on a day the
+upstream map moved.
 
 | Benchmarked alias | Input $/1M | Output $/1M |
 |---|---|---|

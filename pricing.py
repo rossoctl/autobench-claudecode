@@ -10,13 +10,32 @@ does not carry) with **no credential at all**, carrying input, output,
 cacheRead and cacheCreation rates for every model. `prices.json` is a pinned snapshot of the
 rows we price; refresh it with `tools/fetch_prices.py`, which is also the drift check.
 
-THE 0.76 FACTOR. The map publishes UPSTREAM list rates; the gateway's own pages show exactly
-**0.76x** those, for all four benchmarked models in both directions (8 of 8 ratios equal to
-four decimals). `/config/cost_margin_config` and `/config/cost_discount_config` exist on this
-deployment, so a configured margin is the obvious mechanism -- but a virtual key scoped to
-`['llm_api_routes']` gets 403 on both, so **0.76 is inferred from agreement, not read**. PRICES
-below stays hand-transcribed for exactly this reason: it is the independent witness the derived
-rates are checked against, and tests/test_pricing.py fails if they ever disagree.
+WHOSE GATEWAY THIS IS. Not ours and not Red Hat's: it is **IBM Research's ETE** deployment of
+LiteLLM -- an enterprise organization's internal gateway that we are a tenant of. That matters
+twice over. Its rate card is an enterprise arrangement rather than a public price, so this repo
+does not publish the discount (below). And its model set, its margins and its availability can
+all change without notice from our side, which is why the card is pinned and staleness-checked
+rather than assumed constant.
+
+WHAT THE MAP IS vs WHAT WE PAY. The map publishes the UPSTREAM provider's list rates. The
+gateway bills **less than list** -- uniformly, across every benchmarked model and both
+directions. The exact discount is deliberately **not stated anywhere in this repo**: it is a
+term of somebody else's enterprise deployment, not a finding of ours, and no analysis here
+needs it named. Nothing is lost by that, because the code never uses a stored factor: each
+model's billed rates are the hand-transcribed card, and a cache tier is scaled by THAT model's
+own billed/list ratio, computed at read time. Uniformity is therefore a property the code
+CHECKS on every load, not a magic number it trusts.
+
+  Be aware, though, that this repo carries both cards -- the billed one (PRICES, below, needed
+  for every published figure to stay recomputable) and the listed one (prices.json) -- so the
+  ratio is computable by anyone holding both. Not stating it is a decision about what this repo
+  advertises, not a claim that it is unrecoverable.
+
+Why the discount cannot simply be read: `/config/cost_margin_config` and
+`/config/cost_discount_config` exist on this deployment, but a virtual key scoped to
+`['llm_api_routes']` gets 403 on both. So even the uniformity is inferred from agreement between
+two cards. PRICES stays hand-transcribed for exactly that reason -- it is the independent
+witness, and tests/test_pricing.py fails if the two ever stop agreeing.
 
 TWO SCENARIOS, because a cache tier's rate is not the same as how the gateway BILLS it:
 
@@ -41,7 +60,8 @@ import datetime as dt
 import json
 import pathlib
 
-SOURCE = "gateway cost map /public/litellm_model_cost_map x MARGIN (see prices.json)"
+SOURCE = ("hand-transcribed gateway rate card, cross-checked against the upstream cost map "
+          "pinned in prices.json (IBM Research ETE LiteLLM)")
 SOURCE_DATE = "2026-09-09"          # when PRICES was transcribed from the gateway UI
 STALE_AFTER_DAYS = 90
 
@@ -64,7 +84,6 @@ PRICES = {
                                   "backing": "bedrock/us.anthropic.claude-opus-5"},
 }
 
-MARGIN = 0.76
 CACHE_READ_MULT = 0.10
 CACHE_WRITE_MULT = 1.25
 M = 1_000_000
@@ -72,31 +91,57 @@ M = 1_000_000
 SNAPSHOT = pathlib.Path(__file__).resolve().parent / "prices.json"
 
 
-def _per_m(v):
-    return None if v is None else round(v * M * MARGIN, 6)
+def discount_ratio(model, listed):
+    """This model's billed/list ratio, from the two cards -- computed, never stored.
+
+    Returns None unless the input and output ratios agree to four decimals. A model billed at
+    one ratio on input and another on output is not a discount any more, and scaling its cache
+    tiers by either number would be arithmetic with no meaning behind it.
+    """
+    li, lo = (listed.get("input_cost_per_token") or 0), (listed.get("output_cost_per_token") or 0)
+    if not li or not lo:
+        return None
+    hand = PRICES[model]
+    r_in = hand["in"] / (li * M)
+    r_out = hand["out"] / (lo * M)
+    # Rounded to 8 places only to strip float noise (3.00/2.28 lands on 0.7599999999999999).
+    # Far finer than any rate card, and a 1e-9 wobble rounds away in the 6-place dollar figures.
+    return round(r_in, 8) if round(r_in, 4) == round(r_out, 4) else None
 
 
 def _load_snapshot():
     """Billed per-1M rates per tier, from prices.json. None when it is absent.
 
-    Absence is not an error: the hand card below is sufficient to price everything, and a
-    checkout without the snapshot must still reproduce published figures.
+    Absence is not an error: the hand card is sufficient to price everything, and a checkout
+    without the snapshot must still reproduce published figures.
+
+    A model whose two ratios disagree is DROPPED rather than guessed at: `rates()` then falls
+    back to the multiplier convention for it, which is the pre-snapshot behaviour and therefore
+    still reproduces every published figure.
     """
     if not SNAPSHOT.exists():
         return None
     snap = json.loads(SNAPSHOT.read_text())
-    if snap.get("margin") != MARGIN:
-        raise ValueError(f"prices.json margin {snap.get('margin')} != pricing.MARGIN {MARGIN} "
-                         f"-- one of them was edited alone; see tools/fetch_prices.py")
-    rates = {}
+    rates, skipped = {}, []
     for m, e in snap["models"].items():
+        if m not in PRICES:
+            continue
+        ratio = discount_ratio(m, e)
+        if ratio is None:
+            skipped.append(m)
+            continue
+
+        def billed(v, _r=ratio):
+            return None if v is None else round(v * M * _r, 6)
+
         rates[m] = {
-            "in": _per_m(e["input_cost_per_token"]),
-            "out": _per_m(e["output_cost_per_token"]),
-            "cache_read": _per_m(e.get("cache_read_input_token_cost")),
-            "cache_write": _per_m(e.get("cache_creation_input_token_cost")),
+            "in": billed(e["input_cost_per_token"]),
+            "out": billed(e["output_cost_per_token"]),
+            "cache_read": billed(e.get("cache_read_input_token_cost")),
+            "cache_write": billed(e.get("cache_creation_input_token_cost")),
         }
-    return {"fetched": snap.get("fetched"), "source": snap.get("source"), "rates": rates}
+    return {"fetched": snap.get("fetched"), "source": snap.get("source"),
+            "rates": rates, "skipped": skipped}
 
 
 SNAP = _load_snapshot()
@@ -163,8 +208,18 @@ if __name__ == "__main__":
     if SNAP:
         print(f"  snapshot: prices.json fetched {SNAP['fetched']} from the gateway at "
               f"$ANTHROPIC_BASE_URL{SNAP['source']}")
-        print(f"  margin  : x{MARGIN} on the upstream list rate (inferred, uniform 8/8; "
-              f"/config/cost_margin_config is 403 for our key)")
+        print(f"  billing : the snapshot lists the UPSTREAM provider's rates; this gateway (IBM "
+              f"Research ETE) bills\n"
+              f"            BELOW them, by the same proportion for every model and both "
+              f"directions.\n"
+              f"            The proportion is not stated here -- it is a term of an enterprise "
+              f"deployment,\n"
+              f"            and nothing computed below needs it named. Cache tiers are scaled by "
+              f"each\n"
+              f"            model's own billed/list ratio, checked for agreement at load.")
+        if SNAP.get("skipped"):
+            print(f"  ⚠️  ratios disagree for {SNAP['skipped']} -- those fall back to the "
+                  f"x{CACHE_READ_MULT}/x{CACHE_WRITE_MULT} convention")
         print(f"\n  {'model':28} {'cacheRead':>10} {'cacheWrite':>11}   (billed $/1M)")
         for m in sorted(SNAP["rates"]):
             r = rates(m)

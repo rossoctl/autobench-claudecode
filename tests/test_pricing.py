@@ -1,10 +1,15 @@
 """Tests for the rate card -- the money, pinned to two independent sources.
 
 WHY THIS FILE EXISTS. Every dollar figure in results/ was computed from `pricing.PRICES`, which
-was transcribed by hand from the gateway UI. `prices.json` now derives the same rates from the
-gateway's cost map times an inferred 0.76 margin. Two paths to one number is only an improvement
-if they are held against each other: if a refresh moved a rate, the published figures are stale
-and that must surface as a test failure rather than as quietly different money.
+was transcribed by hand from the gateway UI. `prices.json` pins the UPSTREAM provider's list
+rates from the gateway's own cost map, and the billed card is those scaled by each model's own
+billed/list ratio -- computed at load, stored nowhere. Two paths to one number is only an
+improvement if they are held against each other: if a refresh moved a rate, the published figures
+are stale and that must surface as a test failure rather than as quietly different money.
+
+The proportion between the two cards is a term of an enterprise deployment (IBM Research's ETE
+LiteLLM, which we are a tenant of), so no test asserts its value -- only that it is uniform and
+that it reproduces the billed card.
 
 The regression pin below matters more than it looks. `cost()` was rewritten from
 "multiply input by a cache multiplier" to "read a cache tier's own rate", which is arithmetically
@@ -39,28 +44,32 @@ def snapshot():
     return json.loads(SNAPSHOT.read_text())
 
 
-def test_the_snapshot_reproduces_the_hand_transcribed_card_exactly():
-    """list rate x margin must equal what the gateway UI showed, to the cent.
+def test_the_snapshot_scales_to_the_hand_transcribed_card_exactly():
+    """list rate x the model's own ratio must equal what the gateway UI showed, to the cent.
 
     This is the whole justification for automating the pull: the two sources agree, so the
     cheap one can be refreshed without re-reading screenshots. Disagreement means either the
-    gateway's margin moved or a model was repriced -- both invalidate published figures.
+    billing arrangement moved or a model was repriced -- both invalidate published figures.
     """
     snap = snapshot()
     for model, hand in pricing.PRICES.items():
         e = snap["models"][model]
+        ratio = pricing.discount_ratio(model, e)
+        assert ratio is not None, f"{model}: input and output ratios disagree"
         for direction, key in (("in", "input_cost_per_token"), ("out", "output_cost_per_token")):
-            derived = round(e[key] * 1_000_000 * snap["margin"], 6)
+            derived = round(e[key] * 1_000_000 * ratio, 6)
             assert derived == hand[direction], (
-                f"{model} {direction}: cost map x{snap['margin']} = {derived}, "
+                f"{model} {direction}: scaled list rate = {derived}, "
                 f"hand-transcribed card says {hand[direction]}")
 
 
-def test_margin_is_uniform_across_models_and_directions():
-    """A single factor is the claim; eight independent ratios are the evidence for it.
+def test_the_billed_proportion_is_uniform_across_models_and_directions():
+    """One proportion is the claim; eight independent ratios are the evidence for it.
 
-    If one model ever prices differently, `margin` stops being a property of the gateway and
-    becomes an average -- at which point no cost figure derived from it means anything.
+    If one model ever prices differently, the proportion stops being a property of the gateway
+    and becomes an average -- at which point no cost figure scaled by it means anything. The
+    assertion is on UNIFORMITY, not on the value: the value is somebody else's contract term,
+    and pinning it in a test would publish it just as effectively as printing it.
     """
     snap = snapshot()
     ratios = set()
@@ -68,7 +77,9 @@ def test_margin_is_uniform_across_models_and_directions():
         e = snap["models"][model]
         ratios.add(round(hand["in"] / (e["input_cost_per_token"] * 1_000_000), 4))
         ratios.add(round(hand["out"] / (e["output_cost_per_token"] * 1_000_000), 4))
-    assert ratios == {pricing.MARGIN}, f"ratios not uniform: {sorted(ratios)}"
+    assert len(ratios) == 1, f"{len(ratios)} distinct ratios -- not one arrangement any more"
+    assert snap["billed_proportion_uniform"] is True
+    assert snap["billed_model_directions_checked"] == 2 * len(pricing.PRICES)
 
 
 def test_cache_tiers_are_read_from_the_map_not_assumed():
@@ -102,14 +113,22 @@ def test_cost_without_the_snapshot_still_reproduces_the_same_dollars(monkeypatch
     assert got == pytest.approx(PINNED_B, abs=1e-8)
 
 
-def test_snapshot_records_where_it_came_from_and_that_the_margin_is_inferred():
-    """Provenance is part of the datum. `margin_basis` exists so nobody later reads 0.76 as
-    something the gateway told us -- it is agreement between two sources, and the endpoint that
-    would confirm it is 403 for our key."""
+def test_snapshot_records_its_provenance_and_stores_no_billing_proportion():
+    """Provenance is part of the datum, and so is the deliberate absence.
+
+    `billing` exists so nobody later reads these rates as what we pay -- they are the upstream
+    provider's list. No numeric proportion is stored, by design: it is a term of an enterprise
+    deployment, and a generated file is the easiest place for one to end up published.
+    """
     snap = snapshot()
     assert snap["source"].endswith("/public/litellm_model_cost_map")
-    assert snap["margin"] == pricing.MARGIN
-    assert "inferred" in snap["margin_basis"]
+    assert "ETE" in snap["billing"]
+    for banned in ("margin", "margin_ratios_observed", "billed_proportion"):
+        assert banned not in snap, f"{banned} is back in the snapshot"
+    # ...and no module constant holds it either. `rates()` scales by a ratio computed from the
+    # two cards at load time; a constant would be the same disclosure with extra steps, and it
+    # would also silently outlive a change in the arrangement.
+    assert not hasattr(pricing, "MARGIN"), "a stored proportion constant is back in pricing.py"
     assert dt.date.fromisoformat(snap["fetched"]) <= dt.date.today()
     assert set(snap["models"]) == set(pricing.PRICES)
 

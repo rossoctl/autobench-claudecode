@@ -8,14 +8,16 @@ the UI alone and was wrong about the API. This gateway serves
 `GET /public/litellm_model_cost_map` -- **no credential at all** -- carrying every model's
 input, output, cacheRead and cacheCreation rates.
 
-WHAT THE UI SHOWS vs WHAT THE MAP SHOWS. They differ, and uniformly: for all four benchmarked
-models, both directions, the hand-transcribed UI rate is exactly **0.76x** the map's rate
-(8 of 8 ratios equal to four decimals). The gateway exposes `/config/cost_margin_config` and
-`/config/cost_discount_config`, so a configured margin is the obvious mechanism -- but our
-virtual key is scoped to `['llm_api_routes']` and gets 403 on both, so **0.76 is INFERRED from
-agreement, never read**. This tool therefore re-derives the factor on every run and refuses to
-write a snapshot if the models disagree with each other or with MARGIN: a silent change to the
-gateway's margin is exactly the failure this file exists to catch.
+WHOSE GATEWAY, AND WHY THE DISCOUNT IS NOT IN HERE. The deployment is **IBM Research's ETE**
+LiteLLM -- an enterprise organization's internal gateway we are a tenant of, not a Red Hat
+service. The map states the UPSTREAM provider's list rates; the gateway bills BELOW them, by the
+same proportion for every benchmarked model and both directions. That proportion is a term of
+somebody else's enterprise arrangement, so **this tool never writes it into the snapshot** and no
+constant in the repo holds it. It is still CHECKED on every run -- the ratios must agree with
+each other and with the hand-transcribed card in pricing.PRICES, or the snapshot is refused --
+because a silently changed arrangement is exactly the failure this file exists to catch. (The
+gateway would state it at `/config/cost_margin_config`; that route is 403 for a virtual key
+scoped to `['llm_api_routes']`, which is what a benchmark credential is.)
 
 ⚠️ THE ENDPOINT IS NOT BYTE-STABLE. Four consecutive fetches returned three distinct payload
 sizes (2,282,349 / 2,282,533 / 2,285,678 bytes) seconds apart -- almost certainly replicas with
@@ -99,14 +101,16 @@ def extract(cost_map, models):
     return out, missing
 
 
-def derive_margin(listed, ui_rates):
-    """Ratio between the UI rate card and the map, per model per direction.
+def ratios_agree(listed, ui_rates):
+    """Do all billed/list ratios agree to 4 decimals? Returns (agree, count, spread).
 
-    Returns (factor, ratios). `factor` is None unless every ratio agrees to 4 decimals --
-    a spread means the gateway is no longer applying one uniform margin, and the caller must
-    stop rather than average them.
+    The ratios themselves are computed and discarded -- deliberately. What the caller needs is
+    the yes/no: a spread means the gateway is no longer applying one proportion, and every cost
+    figure derived on the assumption that it does becomes an average of two things. `spread` is
+    reported as a COUNT of distinct values so a failure message can be actionable without
+    printing the arrangement.
     """
-    ratios = {}
+    ratios = []
     for m, ui in ui_rates.items():
         e = listed.get(m)
         if not e:
@@ -115,28 +119,30 @@ def derive_margin(listed, ui_rates):
                                ("out", "output_cost_per_token")):
             per_m = (e.get(key) or 0) * 1_000_000
             if per_m:
-                ratios[f"{m}:{direction}"] = round(ui[direction] / per_m, 6)
-    distinct = {round(v, 4) for v in ratios.values()}
-    return (distinct.pop() if len(distinct) == 1 else None), ratios
+                ratios.append(round(ui[direction] / per_m, 4))
+    distinct = set(ratios)
+    return len(distinct) == 1, len(ratios), len(distinct)
 
 
-def build(cost_map, models, ui_rates, margin, url):
+def build(cost_map, models, ui_rates, url):
     listed, missing = extract(cost_map, models)
     if missing:
         raise SystemExit(f"cost map has no entry for {missing} -- refusing to write a partial "
                          f"snapshot; a model that vanished from the map is a finding, not a "
                          f"field to drop")
-    observed, ratios = derive_margin(listed, ui_rates)
-    if observed is None:
-        raise SystemExit(f"the UI/map ratio is NOT uniform any more: {ratios}\n"
-                         f"the gateway's margin has changed shape -- re-read the model pages "
-                         f"before trusting any cost figure")
-    if round(observed, 4) != round(margin, 4):
-        raise SystemExit(f"margin moved: observed {observed}, snapshot says {margin}. Verify "
-                         f"against the gateway UI, then pass --margin {observed}")
+    agree, n, distinct = ratios_agree(listed, ui_rates)
+    if not agree:
+        raise SystemExit(
+            f"the billed/list proportion is NOT uniform any more: {distinct} distinct values "
+            f"across {n} model-directions.\nThe gateway's arrangement has changed shape -- "
+            f"re-read its model pages, update pricing.PRICES, and re-check every published cost "
+            f"figure before trusting one. (Run with --show-ratios if you need the numbers on "
+            f"screen; they are never written to disk.)")
     return {
-        "_comment": "Generated by tools/fetch_prices.py -- do not hand-edit. Rates are the "
-                    "upstream LiteLLM cost map; the gateway bills margin x those.",
+        "_comment": "Generated by tools/fetch_prices.py -- do not hand-edit. These are the "
+                    "UPSTREAM provider's list rates, not what we are billed: the gateway bills "
+                    "less. pricing.PRICES holds the billed card; the proportion between them is "
+                    "deliberately recorded nowhere.",
         "source": COST_MAP,
         "source_kind": "litellm cost map served by the gateway at ANTHROPIC_BASE_URL, "
                        "unauthenticated. The host is deliberately not recorded -- this repo is "
@@ -144,19 +150,22 @@ def build(cost_map, models, ui_rates, margin, url):
                        "catch a snapshot pinned from a different gateway.",
         "source_host_sha256_8": host_digest(url),
         "fetched": dt.date.today().isoformat(),
-        "margin": margin,
-        "margin_basis": "inferred: UI rate card / cost map, uniform across all models and "
-                        "both directions. /config/cost_margin_config is 403 for a virtual "
-                        "key scoped to ['llm_api_routes'], so it cannot be read directly.",
-        "margin_ratios_observed": ratios,
+        "billing": "The gateway (IBM Research ETE LiteLLM, an enterprise deployment we are a "
+                   "tenant of) bills BELOW these list rates, by the same proportion for every "
+                   "model and both directions -- checked on every refresh, recorded here as a "
+                   "yes/no only. /config/cost_margin_config would state the proportion and is "
+                   "403 for a virtual key scoped to ['llm_api_routes'].",
+        "billed_proportion_uniform": agree,
+        "billed_model_directions_checked": n,
         "models": listed,
     }
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--margin", type=float, default=None,
-                    help="expected UI/map factor (default: the snapshot's, else 0.76)")
+    ap.add_argument("--show-ratios", action="store_true",
+                    help="print the billed/list ratios to the terminal (never to disk) -- for "
+                         "diagnosing a non-uniform arrangement")
     ap.add_argument("--check", action="store_true",
                     help="compare the live map against prices.json and exit 1 on drift; "
                          "writes nothing")
@@ -164,10 +173,15 @@ def main():
 
     models = sorted(pricing.PRICES)
     ui_rates = {m: {"in": p["in"], "out": p["out"]} for m, p in pricing.PRICES.items()}
-    margin = a.margin if a.margin is not None else pricing.MARGIN
 
     url = gateway() + COST_MAP
-    fresh = build(fetch_map(url), models, ui_rates, margin, url)
+    cost_map = fetch_map(url)
+    fresh = build(cost_map, models, ui_rates, url)
+
+    if a.show_ratios:
+        print("billed/list ratios (terminal only -- not written to prices.json):")
+        for m in models:
+            print(f"  {m:28} {pricing.discount_ratio(m, fresh['models'][m])}")
 
     if a.check:
         if not SNAPSHOT.exists():
@@ -177,29 +191,38 @@ def main():
         drift = {m: (old["models"].get(m), fresh["models"][m])
                  for m in fresh["models"] if old["models"].get(m) != fresh["models"][m]}
         moved_host = old.get("source_host_sha256_8") != fresh["source_host_sha256_8"]
-        if drift or old.get("margin") != fresh["margin"] or moved_host:
+        uniformity_changed = (old.get("billed_proportion_uniform")
+                              != fresh["billed_proportion_uniform"])
+        if drift or uniformity_changed or moved_host:
             print(f"DRIFT against {SNAPSHOT.name} (pinned {old.get('fetched')}):")
             for m, (was, now) in drift.items():
                 print(f"  {m}\n    pinned {was}\n    live   {now}")
-            if old.get("margin") != fresh["margin"]:
-                print(f"  margin: pinned {old.get('margin')} live {fresh['margin']}")
+            if uniformity_changed:
+                print(f"  billed proportion uniform: pinned "
+                      f"{old.get('billed_proportion_uniform')} live "
+                      f"{fresh['billed_proportion_uniform']} -- the gateway's arrangement "
+                      f"changed shape; --show-ratios to see how")
             if moved_host:
                 print(f"  gateway host: pinned sha256:{old.get('source_host_sha256_8')} "
                       f"live sha256:{fresh['source_host_sha256_8']} -- a DIFFERENT gateway, so "
                       f"this is a different rate card, not drift in one")
             return 1
         print(f"prices.json matches the live cost map ({len(fresh['models'])} models, "
-              f"margin {fresh['margin']}, pinned {old.get('fetched')})")
+              f"billed proportion still uniform across "
+              f"{fresh['billed_model_directions_checked']} model-directions, pinned "
+              f"{old.get('fetched')})")
         return 0
 
     SNAPSHOT.write_text(json.dumps(fresh, indent=2, sort_keys=True) + "\n")
-    print(f"wrote {SNAPSHOT.relative_to(ROOT)}  ({len(fresh['models'])} models, "
-          f"margin {fresh['margin']})")
+    print(f"wrote {SNAPSHOT.relative_to(ROOT)}  ({len(fresh['models'])} models; billed "
+          f"proportion uniform across {fresh['billed_model_directions_checked']} "
+          f"model-directions)")
     for m, e in sorted(fresh["models"].items()):
         i = e["input_cost_per_token"] * 1e6
         o = e["output_cost_per_token"] * 1e6
-        print(f"  {m:28} list {i:6.2f}/{o:6.2f}  ->  billed "
-              f"{round(i * margin, 6):6.2f}/{round(o * margin, 6):6.2f}  per 1M")
+        hand = pricing.PRICES[m]
+        print(f"  {m:28} upstream list {i:6.2f}/{o:6.2f}  ->  we are billed "
+              f"{hand['in']:6.2f}/{hand['out']:6.2f}  per 1M")
     print("\nRe-run any published cost figure if a rate moved: the snapshot is apparatus.")
     return 0
 
