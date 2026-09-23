@@ -242,9 +242,29 @@ autobench-claudecode-cli tasks --retired    # the discarded ones. A discarded ta
 autobench-claudecode-cli models             # aliases, the rate card, and its date
 ```
 
-`models` prints the rate card behind every dollar figure, its `SOURCE_DATE`, and both cache
+`models` prints the rate card behind every dollar figure, where it came from, and both cache
 scenarios. Any `--model` string is accepted; one absent from the card reports no cost column
 and still reports volume and latency.
+
+The card has **two** sources on purpose. `pricing.PRICES` is the hand transcription of the
+gateway's model pages; `prices.json` is a pinned snapshot of
+`GET /public/litellm_model_cost_map`, which the gateway serves **unauthenticated**, times an
+inferred `MARGIN = 0.76` (the map lists upstream rates; the gateway charges 0.76× them, uniform
+across all four models and both directions). Refresh or drift-check the snapshot with:
+
+```bash
+python3 tools/fetch_prices.py            # rewrite prices.json
+python3 tools/fetch_prices.py --check    # exit 1 on drift, write nothing
+```
+
+Two traps worth knowing before you touch either. **The endpoint is not byte-stable** — four
+fetches seconds apart returned three payload sizes, so a digest of the document reports drift
+every time; the snapshot pins *fields for named models* instead. And the margin is **inferred
+from agreement, never read**: `/config/cost_margin_config`, `/model/info`, `/spend/calculate`
+and `/cost/estimate` are all `403` for a virtual key scoped to `['llm_api_routes']`. That is
+why the hand card stays — it is the independent witness, and `tests/test_pricing.py` fails if
+the two sources disagree. `doctor` carries a `rate card` row (WARN) for the offline half of
+that check plus staleness.
 
 ### 3.3 Run one cell
 
@@ -446,7 +466,8 @@ developer-facing entry points and are documented in §10.
 | `harness.py` | the driver. One task → fresh workspace → `claude -p` → verdict → correlate Cortex → one NDJSON row |
 | `sweep.py` | a set of tasks through one arm as a matrix |
 | `profile.py` | the model grid: `--run` invokes, `--report` recompiles from stored runs with no invocations, `--freeze` publishes membership |
-| `pricing.py` | the internal LiteLLM rate card, hand-maintained on purpose |
+| `pricing.py` | the internal LiteLLM rate card: the hand-transcribed witness plus the derived rates from `prices.json` |
+| `prices.json`, `tools/fetch_prices.py` | the pinned cost-map snapshot and the tool that refreshes or drift-checks it (§3.2) |
 | `lib_child.py` | builds the sanitized child environment |
 | `.python-version`, `requirements.lock` | the pinned apparatus: 3.14.3 and the verdict libraries that scored the grid (§2.2) |
 | `tasks/` | 11 active tasks — 2 `xlsx`, 1 `docx`, 2 `pptx`, 1 no-skill control, 4 selection, plus `docxjs-table-dxa` |
@@ -806,10 +827,14 @@ window — nothing else in the row provides them. `tool_calls` and
 `assistant_turns` come from the transcript and are proxy-independent.
 
 Cost is computed by `pricing.py`, never stored: `cost(model, uncached=, cache_read=,
-cache_write=, output=, scenario=)`. `SOURCE_DATE` is `2026-09-09` and the card is
-hand-maintained on purpose. Two scenarios exist because cache billing is an assumption:
-scenario **A** prices all prompt tokens at the input rate; scenario **B** applies
-`CACHE_READ_MULT = 0.10` and `CACHE_WRITE_MULT = 1.25`. Report both, or say which.
+cache_write=, output=, scenario=)`. The in/out rates come from the hand-transcribed `PRICES`
+(`SOURCE_DATE = 2026-09-09`) so that published figures stay recomputable; the cache tiers come
+from `prices.json` when it is present, and fall back to the multipliers otherwise — a checkout
+without the snapshot prices a run identically, which `tests/test_pricing.py` pins. Two scenarios
+exist because cache **billing** is still an assumption even though the cache **rates** are now a
+reading: scenario **A** prices all prompt tokens at the input rate; scenario **B** charges each
+tier its own rate (`CACHE_READ_MULT = 0.10`, `CACHE_WRITE_MULT = 1.25` — the map states exactly
+these). Report both, or say which.
 
 ### Two warnings that have each cost a day
 

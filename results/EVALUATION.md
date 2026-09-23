@@ -177,11 +177,21 @@ the only durable record.
 
 ## 5. Model pricing (internal LiteLLM, 2026-09-09)
 
-**Provenance.** The rate card is **maintained by hand** in `pricing.py`, transcribed from
-the gateway's model pages (`/ui/?page=models`) on **2026-09-09**. That is deliberate, not a
-gap: the page sits behind an interactive internal web-authorization flow and fills its
-contents by script, so there is no endpoint a benchmark credential can read and no automated
-pull is attempted. When rates change, edit `PRICES` and bump `SOURCE_DATE`.
+**Provenance.** The rate card in `pricing.py` was transcribed by hand from the gateway's model
+pages (`/ui/?page=models`) on **2026-09-09**, and every figure below was computed from it.
+
+> **Correction, 2026-09-23.** This section previously called that hand maintenance deliberate,
+> on the grounds that "there is no endpoint a benchmark credential can read". That was true of
+> the *UI* — which does sit behind an interactive web-authorization flow and renders
+> client-side — and wrong about the *API*: the gateway serves
+> `GET /public/litellm_model_cost_map` with **no credential at all**. `prices.json` now pins
+> that map for the four models priced here (`tools/fetch_prices.py`, `--check` for drift).
+> **No number in this evaluation moves:** the map publishes upstream list rates, the gateway
+> charges exactly **0.76×** them across all four models and both directions, and 0.76 × list
+> reproduces the table below to the cent. That factor is *inferred from that agreement, not
+> read* — `/config/cost_margin_config` would state it and is `403` for a key scoped to
+> `['llm_api_routes']` — which is why the hand card stays in the repo as the independent
+> witness the snapshot is tested against.
 
 | Benchmarked alias | Gateway entry | Input $/1M | Output $/1M | Output:input |
 |---|---|---|---|---|
@@ -201,10 +211,16 @@ cache reads**. Two scenarios are therefore reported:
 | Scenario | Assumption |
 |---|---|
 | **A — no cache discount** | Every prompt token billed at the Input rate. Upper bound. |
-| **B — standard cache** | `cacheRead ×0.10`, `cacheWrite ×1.25`, uncached ×1.00 — the published Anthropic/Bedrock convention. Likely case. |
+| **B — standard cache** | `cacheRead ×0.10`, `cacheWrite ×1.25`, uncached ×1.00. Likely case. |
 
 B lands roughly 4–5× below A. **Which the gateway actually bills is unverified** and should
 be confirmed against an invoice before either figure is quoted as fact.
+
+Since 2026-09-23 the two multipliers are a **reading rather than a convention**: the cost map
+states each model's `cache_read_input_token_cost` and `cache_creation_input_token_cost`
+outright, and for all four they come to exactly ×0.10 and ×1.25 of input. What is still unshown
+is whether this gateway *applies* them — `/spend/calculate` and `/cost/estimate` would answer
+that and are both `403` for our key.
 
 **The top-and-bottom ranking is identical under both scenarios in all three cells** — `haiku-4-5`
 cheapest, `opus-5` dearest — so the recommendation does not depend on resolving this. The *full*

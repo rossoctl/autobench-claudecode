@@ -235,10 +235,25 @@ python3 tools/stability_probe.py     # which cells reproduced across sessions (p
 
 ### Monetary cost
 
-`pricing.py` holds the internal LiteLLM rate card, transcribed by hand from the gateway's
-model pages (`/ui/?page=models`) and dated. That page is behind an interactive internal
-web-authorization flow and renders client-side, so there is nothing for a benchmark
-credential to read — when rates change, edit `PRICES` and bump `SOURCE_DATE`.
+`pricing.py` holds the internal LiteLLM rate card. It began as a hand transcription of the
+gateway's model pages (`/ui/?page=models`), which are behind an interactive web-authorization flow
+and render client-side — from which this README previously concluded that there was nothing for a
+benchmark credential to read. **That was true of the UI and wrong about the API:** the gateway
+serves `GET /public/litellm_model_cost_map` with *no credential at all*. `prices.json` is a pinned
+snapshot of the rows we price; refresh it — or check it for drift — with:
+
+```bash
+python3 tools/fetch_prices.py            # rewrite prices.json
+python3 tools/fetch_prices.py --check    # exit 1 on drift, write nothing
+```
+
+The map publishes **upstream list** rates; the gateway charges **0.76×** those, uniformly across
+all four models and both directions (8 of 8 ratios agree to four decimals). That factor is
+*inferred from agreement, not read*: `/config/cost_margin_config` would state it and is `403` for a
+key scoped to `['llm_api_routes']`. So the hand-transcribed `PRICES` stays in the repo as the
+independent witness the derived rates are checked against, and `tests/test_pricing.py` fails if the
+two ever disagree. The snapshot is apparatus, pinned for the same reason as `requirements.lock`: a
+published cost figure must not change because it was re-analysed on a day the upstream map moved.
 
 | Benchmarked alias | Input $/1M | Output $/1M |
 |---|---|---|
@@ -256,10 +271,13 @@ statistically indistinguishable (7.9% apart, *p* = 0.78, §7.3.1), and `xlsx-fin
 out not to be stationary — re-run a day later it reversed sign for `sonnet-5` while `sonnet-4-6`
 reproduced to within 3% (§7.3.2). `opus-5` is 2.5× `sonnet-5`.
 
-**Cache pricing is the one unverified input.** The gateway publishes only Input and Output
-rates while 81–97% of our prompt tokens are cache reads, so two scenarios are computed: **A**
-bills every prompt token at the Input rate (upper bound), **B** applies the standard
-`cacheRead ×0.10 / cacheWrite ×1.25` convention. B lands ~4–5× below A. **The top and bottom of
+**Cache *billing* is the one unverified input — the cache *rates* no longer are.** 81–97% of our
+prompt tokens are cache reads, so two scenarios are computed: **A** bills every prompt token at the
+Input rate (upper bound), **B** charges each tier its own rate. B's multipliers used to be an
+assumption about the published Anthropic convention; they are now a reading — the cost map states
+cacheRead and cacheCreation outright, and for all four models they come to exactly ×0.10 and ×1.25
+of input. What is still unshown is whether *this gateway applies them*: `/spend/calculate` and
+`/cost/estimate` would answer that and are both `403` for our key. B lands ~4–5× below A. **The top and bottom of
 the ranking are identical under both** — `haiku-4-5` cheapest, `opus-5` dearest in every cell — so
 the recommendation does not depend on resolving it. The *full* ordering is not identical: the two
 sonnets change places on `xlsx-fin-colors`. That reads as a scenario-dependent answer but is

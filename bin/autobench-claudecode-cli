@@ -303,6 +303,33 @@ def doctor_checks():
                        f"results/; re-freeze and treat it as a new instrument" if drift else "")
                     + (f" -- UNPINNED {unpinned}" if unpinned else "")))
 
+    # The rate card, offline. A cost column is the one output nothing else in the rig can
+    # sanity-check, and it fails silently: a repriced model just makes every dollar figure wrong
+    # by a constant. Two things are checkable without touching the network -- whether the pinned
+    # snapshot still agrees with the hand-transcribed card, and how long ago anybody confirmed
+    # either against the gateway. The live comparison needs a fetch, so it stays opt-in
+    # (`tools/fetch_prices.py --check`) rather than making `doctor` depend on reachability.
+    disagree = []
+    if pricing.SNAP:
+        for m, hand in pricing.PRICES.items():
+            snap = pricing.SNAP["rates"].get(m)
+            if not snap:
+                disagree.append(f"{m}:absent")
+                continue
+            for d in ("in", "out"):
+                if snap[d] != hand[d]:
+                    disagree.append(f"{m}:{d} snapshot {snap[d]} vs card {hand[d]}")
+    stale = pricing.staleness_warning()
+    out.append(((WARN if (disagree or stale) else OK), "rate card",
+                (f"prices.json fetched {pricing.SNAP['fetched']}, x{pricing.MARGIN} reproduces "
+                 f"the hand card for {len(pricing.PRICES)} models"
+                 if pricing.SNAP else
+                 f"prices.json absent -- hand card only, dated {pricing.SOURCE_DATE}; run "
+                 f"tools/fetch_prices.py")
+                + (f" -- DISAGREES {disagree}: one of the two sources moved, so every dollar "
+                   f"figure in results/ is suspect" if disagree else "")
+                + (f" -- {stale}" if stale else f", confirmed {pricing.stale_days()}d ago")))
+
     # The other library path. The docx skill mandates docx-js, and the proxied child CANNOT
     # install it: npm registry metadata trips Cortex's response-body limit ("502 Bad Gateway --
     # response body too large"). So it has to be on the host, and a task that declares it and
@@ -402,12 +429,27 @@ def cmd_models(a):
     for m, ui, i, o, r in pricing.table():
         print(f"{m:28} {ui:24} {i:>8.2f} {o:>9.2f} {r:>6.1f}x")
     print(f"\nrate card : {pricing.SOURCE}")
-    print(f"dated     : {pricing.SOURCE_DATE} -- hand-maintained; edit pricing.PRICES and bump")
-    print(f"            SOURCE_DATE when rates change")
+    if pricing.SNAP:
+        print(f"snapshot  : prices.json fetched {pricing.SNAP['fetched']} from the gateway at "
+              f"$ANTHROPIC_BASE_URL{pricing.SNAP['source']}")
+        print(f"            (unauthenticated). Refresh or drift-check with "
+              f"tools/fetch_prices.py [--check].")
+        print(f"margin    : the map lists UPSTREAM rates; this gateway charges x{pricing.MARGIN} of")
+        print( "            them, uniform across all models and both directions. INFERRED from")
+        print( "            agreement with the hand-transcribed card, not read -- the endpoint that")
+        print( "            would state it is 403 for a key scoped to ['llm_api_routes'].")
+    else:
+        print(f"dated     : {pricing.SOURCE_DATE} -- prices.json absent, so the hand-transcribed")
+        print( "            card is the only source; run tools/fetch_prices.py to pin the map")
     print(f"cache      : scenario B bills cacheRead x{pricing.CACHE_READ_MULT}, "
-          f"cacheWrite x{pricing.CACHE_WRITE_MULT}; scenario A bills every prompt token at")
-    print( "            the input rate. Which one the gateway applies is UNVERIFIED and matters:")
-    print( "            cache reads are 81-97% of prompt tokens, so A lands ~4-5x above B.")
+          f"cacheWrite x{pricing.CACHE_WRITE_MULT} -- those ratios are READ")
+    print( "            from the cost map, not assumed. Whether the gateway APPLIES them is still")
+    print( "            unverified (/spend/calculate is 403), and scenario A bills every prompt")
+    print( "            token at the input rate: cache reads are 81-97% of prompt tokens, so A")
+    print( "            lands ~4-5x above B.")
+    w = pricing.staleness_warning()
+    if w:
+        print(f"⚠️  {w}")
     print( "\nAny --model string is accepted; a model absent from the card above simply reports")
     print( "no cost column. Volume and latency still work.")
     return 0
