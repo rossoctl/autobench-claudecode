@@ -1024,9 +1024,22 @@ One row per repetition, written to `out/runs/<task>-<arm>-<model>-<timestamp>.nd
 **Identity** — `task_id`, `arm`, `mode`, `rep`, `model_requested`, `model`, `workspace`,
 `allowed_tools`, `hidden_verdict`
 
-**Verdict** — `passed`, `pytest_rc`, `pytest_tail`, `tests_untouched`, `baseline_ok`,
-`baseline_tail`, `no_artifact_produced`, `selection_correct`, `expected_selection`,
-`expected_skill`
+**Verdict** — `passed`, `pytest_rc`, `pytest_tail`, `pytest_failures`, `tests_untouched`,
+`baseline_ok`, `baseline_tail`, `no_artifact_produced`, `selection_correct`,
+`expected_selection`, `expected_skill`
+
+`pytest_failures` is one entry per failing test — `FAILED test_x.py::test_y - AssertionError:
+<message>`, from a `-rf` run, capped at 400 characters each — and empty on a green row. It
+exists because **a pass rate is not a reason**, and a compliance task deliberately scores
+several independent rules plus a structure guard, so "2 failed" covers three situations that
+call for three different responses: the skill missed one rule, it missed all of them, or the
+guard is brittle and the row says nothing about the skill. Both mistakes that motivated the
+field are recorded in `results/`: a 2/3 that was really 3/3-on-the-rule plus one brittle guard,
+and a docx cell read as "the skill did not help" when the question was *which* rule it missed.
+Treat it as diagnostic rather than publishable: an assertion message quotes the artifact, so it
+can contain whole sentences the model wrote. Rows recorded before the field exists omit it,
+which is why `sweep.py` falls back to `pytest_tail` rather than rendering an empty list as
+"passed".
 
 **Attribution** — `tool_calls`, `tool_histogram`, `assistant_turns`, `skills_invoked`,
 `skills_fired`, `skill_on_wire`, `subagents_invoked`, `background_tools`
