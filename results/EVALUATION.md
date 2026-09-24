@@ -15,6 +15,20 @@ that are deliberately kept out of the grid ·
 > here say nothing about any later version of a skill, or about the `*-v2` rewording variants
 > in `skills/` — those are a separate experiment with its own arms.
 
+> **Scope note, 2026-09-24 — what is *on this page* and what is not.** Every measurement below
+> is the **`xlsx`** skill (plus the skill-free `cortex-pyfix-001` control), at the frozen
+> manifest digests, in the 149-repetition cost grid. **`docx` and `pptx` have since been
+> measured, and they are deliberately not here.** Those rounds ran after the grid was frozen,
+> at n=3 against n=5, on tasks that never entered it, and their rows are written to
+> `out/modelskill/` — outside `profile.RUN_DIRS`, so no `--freeze` can sweep them in. They live
+> in their own dated files: [`docx-pptx-gate-20260921.md`](docx-pptx-gate-20260921.md) (which
+> tasks survived the unaided gate), [`docx-pptx-onarm-20260922.md`](docx-pptx-onarm-20260922.md)
+> (the first ON arm, and the confound it could not resolve) and
+> [`docx-pptx-v2-20260924.md`](docx-pptx-v2-20260924.md) (the rule separated from the apparatus —
+> a pptx 3/3 without the subagent, docx 3/3 on both scored rules once the rules are hoisted, and
+> a correction to one of that round's own baselines from 0/6 to 1/6). This page stays a record of
+> the frozen grid; the round files are where the docx/pptx claims are stated and superseded.
+
 ---
 
 ## 1. Executive summary
@@ -281,13 +295,23 @@ is objectively better practice.** A capable model already does good practice unp
 | `xlsx` | blue = hardcoded input (arbitrary banking convention) | **discriminates** |
 | `xlsx` | professional font, zero formula errors | **discriminates** |
 | `xlsx` | `$#,##0` / `0.0%` / `0.0x`, assumptions as cell refs | passes unaided — discarded |
-| `docx` | real bullets, US Letter, DXA table widths | passes unaided — discarded |
+| `docx` | real bullets, US Letter, DXA table widths | passes unaided — discarded (⚠️ see below) |
 | `pptx` | size hierarchy, non-text-only slides | passes unaided — discarded |
 
 A second trap: **path-dependent rules.** The `docx` rules exist to correct footguns in
 docx-js, the library that skill itself mandates (A4 default, percentage table widths). The
 unaided agent uses python-docx, whose defaults already satisfy them, so it never meets the
 footgun. Testing those needs the same library forced in both arms — a different experiment.
+
+⚠️ **That experiment has since been run, and the `docx` row above is the weakest claim on this
+page.** Forcing docx-js in both arms turns "DXA table widths" from an undiscriminating rule into
+a 1/6-unaided → 3/3-with-the-skill effect, and a docx rule that is not a library footgun at all
+(Arial default, black heading text) discriminates once it is stated as a property of the output
+rather than inside an example snippet. Neither belongs in the grid below — different tasks,
+different dates, n=3 — so this page keeps the frozen result and points at the rounds:
+[gate](docx-pptx-gate-20260921.md), [ON arm](docx-pptx-onarm-20260922.md),
+[`v2`](docx-pptx-v2-20260924.md). Read "passes unaided" in that row as *"the rules as first
+tested, on the library the model picks unaided"*, not as a property of the `docx` skill.
 
 ---
 
@@ -678,6 +702,13 @@ repetitions per task (207k/254k/663k vs 1,234k/1,278k/1,324k; 364k/380k/603k vs
 single membership change could move it 6-fold. At n=6 the mode frequencies are unknown, so no
 point estimate is defensible. These are retired tasks; the fix is more repetitions if the
 number is ever wanted, not a better choice of median.
+
+Since then a *replacement* pptx task has been measured on both arms, and it reproduces the
+shape of the problem rather than resolving it: three repetitions spread 2.47× internally, and
+the per-repetition `Edit` counts show why — two drafts needed no repairs, one did and cost what
+an unbounded repetition costs. Bimodality in the pptx ON arm is looking like a property of the
+workload, not of those two retired tasks
+([`docx-pptx-v2-20260924.md`](docx-pptx-v2-20260924.md) §1).
 
 **The cost profile in §7.1–7.4 is unaffected.** Verified directly rather than assumed: the
 current detector was re-applied to all 160 pinned repetitions, and every hit falls in the
