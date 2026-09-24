@@ -493,7 +493,7 @@ developer-facing entry points and are documented in §10.
 
 ## 5. The data path, end to end
 
-One call to `run_rep` in `harness.py`, in order. The order is load-bearing in three
+One call to `run_rep` in `harness.py`, in order. The order is load-bearing in four
 places, each flagged below. Everything here is cited **by symbol**, never by line number:
 this file has already gone stale twice because an insertion near the top of `harness.py`
 moved every number below it while the prose stayed plausible.
@@ -528,10 +528,16 @@ moved every number below it while the prose stayed plausible.
    patterns. ⚠️ It must be `copytree`, not per-entry `copy2`: running the verdict tests by
    hand leaves a `__pycache__/` inside `verdict/`, and a flat copy dies on it with
    `IsADirectoryError`. That killed a 25-repetition opus run at repetition 1.
-11. **Score** — `pytest -q` again; `passed = (rc == 0) and tests_untouched`.
-12. **Correlate Cortex** — events in `[t0, t1]` for the target host give tokens and
+11. **`verdict_apparatus(test_hashes(ws))`** digests the test files that are about to score the
+    row (§12). ⚠️ **Order matters, and it is the mirror image of step 9:** this one must come
+    *after* step 10. Taken beside step 3 it would record the workspace the agent saw — empty of
+    tests for exactly the hidden-verdict tasks whose verdict *is* the instrument — and every
+    unit test would still pass.
+12. **Score** — `pytest -q` again, with `-rf` so the row can record *which* assertion failed;
+    `passed = (rc == 0) and tests_untouched`.
+13. **Correlate Cortex** — events in `[t0, t1]` for the target host give tokens and
     `llm_calls`; request-phase messages give `skill_on_wire`.
-13. **Detect confounds**, then emit the row.
+14. **Detect confounds**, then emit the row.
 
 Two context managers wrap all of this:
 
