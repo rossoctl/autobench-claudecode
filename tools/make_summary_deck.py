@@ -150,7 +150,7 @@ s = prs.slides.add_slide(BLANK); bg(s, INK); DARK_SLIDES.add(len(prs.slides._sld
 tb(s, "Benchmarking Claude Code", 0.9, 2.1, 11.5, 1.1, 46, color=RGBColor(0xFF, 0xFF, 0xFF), bold=True)
 tb(s, "Cost, skill effect and model selection — measured, priced, and where it\nsurprised us",
    0.9, 3.4, 11.0, 1.0, 20, color=ICE)
-tb(s, "209 recorded repetitions  ·  149 in the cost grid (18 cells n=5, 2 at n≈30)  ·  4 models  ·  internal LiteLLM",
+tb(s, "209 recorded repetitions  ·  149 in the cost grid (18 cells n=5, 2 at n≈30)  ·  4 models  ·  IBM Research ETE LiteLLM",
    0.9, 5.75, 11.0, 0.4, 13, color=RGBColor(0x9A, 0xB0, 0xD8))
 tb(s, f"Last modified {dt.datetime.now().astimezone().strftime('%Y-%m-%d %H:%M %Z')}",
    0.9, 6.2, 11.0, 0.35, 12, color=RGBColor(0x7A, 0x8F, 0xC0))
@@ -170,7 +170,7 @@ SECTIONS = [
         ("9", "What the verdict actually is"),
     ]),
     ("2 · Pricing", [
-        ("10", "Model pricing — internal LiteLLM rate card"),
+        ("10", "Model pricing — the gateway rate card"),
     ]),
     ("3 · Findings", [
         ("11", "A prediction of ours that was falsified"),
@@ -374,26 +374,30 @@ section(2, "Pricing")
 
 # ─────────────────────────────────────────────────── 9. pricing
 s = prs.slides.add_slide(BLANK); bg(s, PAPER)
-slide_title(s, "Model pricing — internal LiteLLM", "rate card")
+slide_title(s, "Model pricing — the gateway rate card", "rate card")
+tb(s, "Whose gateway: IBM Research’s ETE LiteLLM, an enterprise deployment we are a tenant of — not a Red Hat service, and not ours.",
+   0.7, 1.93, 11.9, 0.3, 14, color=INK)
 rows = [["benchmarked alias", "gateway entry", "input $/1M", "output $/1M", "vs sonnet-5"],
         ["claude-haiku-4-5-20251001", "aws/claude-haiku-4-5", "0.76", "3.80", "0.50×"],
         ["claude-sonnet-4-6", "aws/claude-sonnet-4-6", "2.28", "11.40", "1.50×"],
         ["claude-sonnet-5", "aws/claude-sonnet-5", "1.52", "7.60", "1.00×"],
         ["claude-opus-5", "aws/claude-opus-5", "3.80", "19.00", "2.50×"]]
-table(s, rows, 0.7, 2.0, 11.9, [3.7, 3.2, 1.7, 1.8, 1.5], size=14,
+table(s, rows, 0.7, 2.32, 11.9, [3.7, 3.2, 1.7, 1.8, 1.5], size=14,
       highlight={(3, 2): GOOD, (3, 3): GOOD, (4, 4): WARN})
-tb(s, "Transcribed by hand from the gateway model pages on 2026-09-09. That page needs interactive internal web\n"
-      "authorization and fills itself by script, so no automated pull is possible or attempted.",
-   0.7, 3.75, 11.9, 0.55, 12, color=MUTED)
 tb(s, "sonnet-5 is priced at 2/3 of sonnet-4-6 — the single most consequential fact in the analysis.",
-   0.7, 4.35, 11.9, 0.35, 16, color=GOOD, bold=True)
-tb(s, "The cache caveat", 0.7, 4.85, 11.9, 0.3, 15, color=INK, bold=True)
-tb(s, "The gateway publishes only Input and Output rates, but 81–97% of our prompt tokens are CACHE READS.\n"
-      "  Scenario A — no discount: every prompt token at the Input rate (upper bound)\n"
-      "  Scenario B — standard Anthropic/Bedrock convention: cacheRead ×0.10, cacheWrite ×1.25\n"
-      "B lands ~4–5× below A. Which the gateway actually bills is UNVERIFIED.\n"
-      "The model ranking is identical under both, so the recommendation does not depend on resolving it.",
-   0.7, 5.2, 11.9, 1.5, 12.5, color=BODY, spacing=2)
+   0.7, 4.08, 11.9, 0.35, 16, color=GOOD, bold=True)
+tb(s, "Correction, 2026-09-23 — an earlier version of this slide said no automated pull was possible", 0.7, 4.58, 11.9, 0.3, 14, color=WARN, bold=True)
+tb(s, "True of the UI, wrong about the API. The rates above were transcribed by hand on 2026-09-09 from a page that does need an interactive\n"
+      "web authorization — but GET /public/litellm_model_cost_map needs NO credential, and agrees with that transcription on all four models and\n"
+      "both directions. It is now pinned in prices.json and drift-checked. What it publishes is the UPSTREAM provider’s list price: this gateway bills\n"
+      "BELOW list, by the same proportion for every model and both directions. The proportion is a term of somebody else’s enterprise deployment,\n"
+      "so it is not stated here — and it is inferred from the two cards agreeing, never read: /config/cost_margin_config is 403 for our key.",
+   0.7, 4.92, 11.3, 0.95, 11.5, color=BODY, spacing=0)
+tb(s, "The cache caveat — narrower than it was", 0.7, 6.02, 11.9, 0.3, 14, color=INK, bold=True)
+tb(s, "81–97% of our prompt tokens are CACHE READS. Scenario B prices them ×0.10 and cacheWrite ×1.25, landing ~4–5× below scenario A, which\n"
+      "bills every prompt token at the input rate. Those multipliers were an assumption about the Anthropic convention; the map states them\n"
+      "outright, so they are a READING now. Whether the gateway APPLIES the tiers when it invoices is still UNVERIFIED — but ranking holds in both.",
+   0.7, 6.34, 11.3, 0.6, 11.5, color=BODY, spacing=0)
 
 section(3, "Findings")
 
