@@ -64,7 +64,11 @@ def main():
         rows.append({"task": t.name, "pass": npass, "n": len(recs), "conf": conf,
                      "wire": wires, "tokens": toks, "wall": wall,
                      "reasons": reasons, "file": latest[-1],
-                     "fails": [x["pytest_tail"] for x in recs if not x["passed"]]})
+                     # The failing assertions when the harness recorded them, the summary line
+                     # otherwise -- rows written before pytest_failures existed have no
+                     # per-rule detail to show, and an empty list there would read as "passed".
+                     "fails": [f for x in recs if not x["passed"]
+                               for f in (x.get("pytest_failures") or [x["pytest_tail"]])]})
         if a.arm == "select":
             fired = [x.get("skills_fired") for x in recs]
             want = recs[0].get("expected_selection")
@@ -75,8 +79,10 @@ def main():
                   f"skill_on_wire={wires} tok_med={toks} wall_med={wall}s")
         if reasons:
             print(f"      confounds: {reasons}")
-        for f in rows[-1]["fails"][:1]:
-            print(f"      e.g. fail: {f[:100]}")
+        # Distinct rules, not the first three failures: three repetitions failing the same
+        # assertion is one finding, and failing three different ones is three.
+        for f in sorted(set(rows[-1]["fails"]))[:4]:
+            print(f"      fail: {f[:160]}")
 
     print(f"\n===== ARM {a.arm.upper()} SUMMARY =====")
     for r in rows:

@@ -353,10 +353,31 @@ def test_hashes(ws):
 
 
 def pytest_run(ws):
-    r = subprocess.run([VENV_PY, "-m", "pytest", "-q"], cwd=ws,
-                       capture_output=True, text=True, timeout=300)
+    """(rc, last line, full output). `-rf` so the full output names the failing ASSERTION.
+
+    Without `-rf` the only thing that survived into a row was "2 failed, 1 passed", and a
+    pass rate is not a reason. That cost real interpretation twice: a docx cell read as
+    "the skill did not close the gap" when the question was WHICH of the two rules it
+    missed, and a 2/3 that turned out to be 3/3 on the rule plus a brittle structure guard.
+    COLUMNS is widened because pytest truncates a short-summary line to the terminal width,
+    and these assertions carry the offending value in the message.
+    """
+    r = subprocess.run([VENV_PY, "-m", "pytest", "-q", "-rf"], cwd=ws,
+                       capture_output=True, text=True, timeout=300,
+                       env={**os.environ, "COLUMNS": "400"})
     out = (r.stdout + r.stderr).strip()
     return r.returncode, (out.splitlines()[-1] if out.splitlines() else ""), out
+
+
+def failed_assertions(out, limit=400):
+    """The `FAILED test_x.py::test_y - AssertionError: ...` lines from a `-rf` run.
+
+    One entry per failing test, in pytest's order. Diagnostic, not publishable verbatim: an
+    assertion message quotes the artifact, so it can contain whole sentences the model wrote.
+    `out/` is gitignored and the frozen manifest stores digests rather than rows, so this
+    stays local -- but a report that pastes it is a disclosure decision, like EVENT_KEEP.
+    """
+    return [ln.strip()[:limit] for ln in out.splitlines() if ln.startswith("FAILED ")]
 
 
 # ---------------------------------------------------------------- transcript
@@ -781,6 +802,11 @@ def run_rep(task, rep, cfg_dir, model=DEFAULT_MODEL, arm="on", timeout=1800,
         "task_id": task["task_id"], "rep": rep,
         "t0": t0.isoformat(), "t1": t1.isoformat(),
         "passed": passed, "pytest_rc": rc1, "pytest_tail": tail1,
+        # WHICH rule failed, not just how many. A compliance task scores several independent
+        # rules plus a structure guard, and those three outcomes call for three different
+        # responses: the skill missed a rule, the skill missed all of them, or the guard is
+        # brittle and the row says nothing about the skill at all.
+        "pytest_failures": failed_assertions(out1),
         "baseline_ok": baseline_ok, "baseline_tail": tail0,
         "hidden_verdict": bool(task.get("verdict")),
         "no_artifact_produced": no_artifact,
@@ -930,6 +956,10 @@ def main():
                   f"confounded={rec['confounded']}")
             if rec["confound_reasons"]:
                 print(f"         reasons: {rec['confound_reasons']}")
+            # Printed as it happens, not only stored: a long sweep is watched, and which rule
+            # failed is the one thing worth reading before the next repetition starts.
+            for f in rec["pytest_failures"]:
+                print(f"         {f[:200]}")
 
     ok = [r for r in recs if not r["confounded"]]
     print(f"\n===== {task['task_id']} =====")
