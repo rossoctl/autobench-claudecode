@@ -16,7 +16,7 @@ from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 from pptx.oxml.ns import qn
 from pptx.util import Inches, Pt
 
-OUT = pathlib.Path(__file__).resolve().parent.parent / "results" / "autobench-claudecode-summary.pptx"
+OUT = pathlib.Path(__file__).resolve().parent.parent / "docs" / "autobench-claudecode-summary.pptx"
 
 INK = RGBColor(0x1E, 0x27, 0x61)      # navy, dominant
 ICE = RGBColor(0xCA, 0xDC, 0xFC)      # supporting

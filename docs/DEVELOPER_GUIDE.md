@@ -484,7 +484,8 @@ developer-facing entry points and are documented in §10.
 | `skills/` | the skill as pinned apparatus: `MANIFEST.json` (digests only) and the `<skill>-<variant>/overlay.json` edit recipes. Contains no skill prose — see `skills/README.md` |
 | `tools/` | task generators plus the controls and analysis tools |
 | `tests/` | 106 tests guarding the confound detector, workspace setup, the result-event whitelist, the apparatus pins, every hidden verdict's calibration, and the CLI's reporting |
-| `results/` | `EVALUATION.md`, the frozen manifest, the cost-profile artifacts, the generated deck |
+| `results/` | `EVALUATION.md`, the frozen manifest, the cost-profile artifacts |
+| `docs/` | `DEVELOPER_GUIDE.md` and the generated summary deck (`.pptx` + exported `.pdf`) |
 | `out/` | **gitignored.** Per-run NDJSON and the raw SSE capture, which contains full prompts |
 | `out/modelskill/` | where the CLI writes by default — outside `profile.RUN_DIRS`, so consumer runs cannot join the published grid |
 
