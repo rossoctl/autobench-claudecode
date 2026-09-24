@@ -352,6 +352,36 @@ def test_hashes(ws):
             for p in sorted(pathlib.Path(ws).glob("test_*.py"))}
 
 
+def verdict_apparatus(hashes):
+    """One digest over the test files that ACTUALLY scored this repetition.
+
+    THE THIRD INSTRUMENT, and the one that decides the number. `apparatus()` pins the venv
+    that runs the verdict and `skill_apparatus()` pins the treatment, but nothing recorded
+    the verdict itself -- so a verdict fixed between two batches of the same cell is, in the
+    rows, indistinguishable from a model that behaved differently.
+
+    That is not hypothetical. On 2026-09-21 the docx structure guard was rewritten to find
+    headings by shape, 44 minutes after the first OFF batch of `docx-brand-arial-black` ran.
+    Both batches were then published as one 0/6 baseline; re-scoring every surviving artifact
+    under the fixed guard makes it 1/6, which is a marginal cell rather than a zero one.
+    Recovering that took git-log archaeology against run timestamps. With this field it is a
+    GROUP BY.
+
+    Digested from the files present in the workspace at verdict time rather than from
+    `task["verdict"]`, because that is the instrument in both shapes a task can take: a hidden
+    verdict copied in after the agent exits, and `cortex-pyfix-001`, where the tests are
+    visible and ARE the spec. None when no test file scored the row (a selection task), for
+    the same reason `skill_sha` is None on the OFF arm: a digest of nothing would read as
+    "something was there".
+    """
+    if not hashes:
+        return {"verdict_sha": None, "verdict_files": 0}
+    h = hashlib.sha256()
+    for name in sorted(hashes):
+        h.update(name.encode() + b"\0" + hashes[name].encode() + b"\0")
+    return {"verdict_sha": h.hexdigest(), "verdict_files": len(hashes)}
+
+
 def pytest_run(ws):
     """(rc, last line, full output). `-rf` so the full output names the failing ASSERTION.
 
@@ -699,6 +729,10 @@ def run_rep(task, rep, cfg_dir, model=DEFAULT_MODEL, arm="on", timeout=1800,
         # 25-rep opus run at rep 1 -- the lesson was documented in fresh_ws and never
         # applied here, 140 lines away.
         shutil.copytree(task["verdict"], ws, ignore=IGNORE, dirs_exist_ok=True)
+    # AFTER the copy: the digest has to cover the verdict that ran, not the workspace the
+    # agent saw. Taking it beside `after_tests` above would record {} for every hidden-verdict
+    # task -- i.e. exactly the tasks whose verdict is the whole instrument.
+    scoring_tests = test_hashes(ws)
     rc1, tail1, out1 = pytest_run(ws)
     # "no artifact produced" is NOT the same failure as "artifact is non-compliant".
     # The first means the agent could not do the work at all -- e.g. its skill mandates a
@@ -816,6 +850,10 @@ def run_rep(task, rep, cfg_dir, model=DEFAULT_MODEL, arm="on", timeout=1800,
         # What measured this row: the verdict interpreter and libraries, pinned by
         # .python-version and requirements.lock. A rebuilt venv is a changed instrument.
         **apparatus(),
+        # And the verdict itself -- the instrument that decides passed/failed. An edited
+        # assertion moves a pass rate with no model involved; without this the movement is
+        # indistinguishable from a result.
+        **verdict_apparatus(scoring_tests),
         # What the child was TREATED with: the skill tree it could actually see, digested.
         # On the ON arm this is the independent variable, so a row without it is a row whose
         # treatment is only recoverable from a file mtime.
@@ -921,6 +959,14 @@ def main():
     sk_ap = skill_apparatus(cfg_dir, a.skill_variant)
     print(f"skill sha: {(sk_ap['skill_sha'] or '<no skill>')[:16]} "
           f"({sk_ap['skill_files']} files, variant={sk_ap['skill_variant']})")
+    # Printed beside the skill digest because they are the same kind of claim: this is the
+    # instrument, and an uncommitted edit to it is the easy way to compare two cells that were
+    # never scored by the same rule.
+    v_ap = verdict_apparatus(test_hashes(task["verdict"]) if task.get("verdict")
+                             else test_hashes(task["workspace"]))
+    print(f"verdict  : {(v_ap['verdict_sha'] or '<none>')[:16]} "
+          f"({v_ap['verdict_files']} test files, "
+          f"{'hidden' if task.get('verdict') else 'visible to the agent'})")
     for n, line in enumerate(applied):
         # One line per applied op, because "the variant ran" is not the same claim as "these
         # four edits landed" -- and only the second one is checkable from the log.

@@ -1124,6 +1124,34 @@ Without these fields an upstream skill update between two runs moves a pass rate
 involved and leaves nothing in the data to show it. `skills/MANIFEST.json` pins the baseline, and
 `doctor` warns on drift.
 
+**The verdict, also apparatus** — `verdict_sha`, `verdict_files`
+
+There are **three** instruments in a repetition, and the two groups above pin only two of them.
+The venv *runs* the verdict; the skill is the *treatment*; the assertions themselves decide
+`passed`, and they are the most load-bearing of the three. `harness.verdict_apparatus` digests the
+test files that scored the row — sorted relative path + content, so a rename counts as a change —
+and `verdict_files` is how many there were.
+
+The digest is taken **after** the hidden verdict is copied into the workspace, not beside
+`tests_untouched`. Both orderings look right and only one is: taken earlier it would record the
+workspace the agent saw, which is empty of tests for exactly the tasks whose verdict *is* the
+whole instrument. `null`/0, not a digest of nothing, when no test file scored the row — the same
+reasoning as `skill_sha` on the OFF arm. Selection tasks are the honest `null` case: there
+`passed` is `bool(selection_correct)`, read from the transcript, and pytest decides nothing.
+
+This exists because it already went wrong. `docx-brand-arial-black`'s published 0/6 unaided
+baseline was assembled from two batches 36 minutes apart, with a rewrite of the verdict's
+structure guard in between — the guard had keyed on style names, and unaided runs write every
+paragraph as `Normal`, so those documents scored as having no headings at all. Under one
+consistent verdict that baseline is **1/6**: a marginal cell rather than a zero one, which changes
+how its ON arm reads. Nothing in the rows could show it; recovering it took `git log` archaeology
+against run timestamps, and with this field it is a `GROUP BY`
+([`results/docx-pptx-v2-20260924.md`](../results/docx-pptx-v2-20260924.md) §5).
+
+⚠️ Same caveat as the apparatus block: rows written before this field carry no verdict digest, so
+two batches of one cell cannot be *proven* to share a verdict retrospectively — only dated against
+the verdict's git history.
+
 ---
 
 ## 13. Invariants
