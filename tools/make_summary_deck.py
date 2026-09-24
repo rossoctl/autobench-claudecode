@@ -13,6 +13,7 @@ import pathlib
 from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
+from pptx.oxml.ns import qn
 from pptx.util import Inches, Pt
 
 OUT = pathlib.Path(__file__).resolve().parent.parent / "results" / "autobench-claudecode-summary.pptx"
@@ -165,25 +166,26 @@ SECTIONS = [
         ("4", "What is being measured"),
         ("5", "Terms in use"),
         ("6", "Benchmarking setup — architecture"),
-        ("7", "Why this shape — rationale"),
-        ("8", "How a task earns its place"),
-        ("9", "What the verdict actually is"),
+        ("7", "How one repetition actually runs — sequence"),
+        ("8", "Why this shape — rationale"),
+        ("9", "How a task earns its place"),
+        ("10", "What the verdict actually is"),
     ]),
     ("2 · Pricing", [
-        ("10", "Model pricing — the gateway rate card"),
+        ("11", "Model pricing — the gateway rate card"),
     ]),
     ("3 · Findings", [
-        ("11", "A prediction of ours that was falsified"),
-        ("12", "Two factors drive token cost"),
-        ("13", "Money reverses the token conclusion"),
-        ("14", "Token-efficiency is not cost-efficiency"),
-        ("15", "A subagent's calls land in the totals"),
-        ("16", "Skill cost is a property of skill × model"),
-        ("17", "Skill selection is reliable"),
+        ("12", "A prediction of ours that was falsified"),
+        ("13", "Two factors drive token cost"),
+        ("14", "Money reverses the token conclusion"),
+        ("15", "Token-efficiency is not cost-efficiency"),
+        ("16", "A subagent's calls land in the totals"),
+        ("17", "Skill cost is a property of skill × model"),
+        ("18", "Skill selection is reliable"),
     ]),
     ("4 · Conclusion", [
-        ("18", "Model selection recommendation"),
-        ("19", "Limitations, stated plainly"),
+        ("19", "Model selection recommendation"),
+        ("20", "Limitations, stated plainly"),
     ]),
 ]
 COLS = [(0.7, SECTIONS[:2]), (6.9, SECTIONS[2:])]
@@ -316,7 +318,81 @@ tb(s, "Three measurement sources, because none can answer another’s question: 
       "parsed, and Cortex makes the real HTTPS connection outbound to the gateway.",
    0.7, 6.15, 12.2, 1.0, 11.5, color=MUTED, spacing=1)
 
-# ─────────────────────────────────────────────────────────── 6. rationale
+# ─────────────────────────────────────────────────────────── 6. sequence
+# A sequence diagram, not a second architecture diagram: the previous slide says what the
+# parts ARE, this one says in what ORDER they act -- and carries the consequence, that the
+# two measurement streams are never joined by an identifier.
+s = prs.slides.add_slide(BLANK); bg(s, PAPER)
+slide_title(s, "How one repetition actually runs", "sequence")
+tb(s, "Two streams leave the child by different routes, and nothing carries an id common to both.",
+   0.7, 1.93, 11.9, 0.3, 15, color=INK)
+
+LANES = [("harness", "harness.py", 1.75, True), ("claude", "claude -p\nheadless child", 5.05, False),
+         ("Cortex", "Cortex\nlocal service", 8.35, False), ("LiteLLM", "LiteLLM\ngateway", 11.6, True)]
+X = {key: cx for key, _, cx, _ in LANES}
+LANE_W, LANE_T, LANE_H, LIFE_END = 2.1, 2.26, 0.44, 6.60
+for _key, label, cx, dark in LANES:
+    box(s, label, cx - LANE_W / 2, LANE_T, LANE_W, LANE_H, size=11, bold=True,
+        fill=(INK if dark else ICE),
+        color=(RGBColor(0xFF, 0xFF, 0xFF) if dark else BODY))
+    ln = s.shapes.add_connector(2, Inches(cx), Inches(LANE_T + LANE_H),
+                               Inches(cx), Inches(LIFE_END))
+    ln.line.color.rgb = ICE; ln.line.width = Pt(1)
+
+CURSOR = {"y": 3.05}
+
+
+def step(n, src, dst, text, *, color=INK):
+    """One numbered interaction, laid out top-down. dst=None means the actor acts on itself.
+
+    Label sits ABOVE its own arrow, so the advance has to be computed from the NEXT step's
+    line count -- hence the cursor rather than a fixed pitch. Four of the ten steps never
+    leave harness.py, which is why a self-action gets a marker and not a stub arrow.
+    """
+    nlines = text.count("\n") + 1
+    y = CURSOR["y"] + (0.16 * nlines + 0.175 if n > 1 else 0)
+    CURSOR["y"] = y
+    x1 = X[src]
+    if dst is None:
+        m = s.shapes.add_shape(1, Inches(x1 - 0.055), Inches(y - 0.055),
+                               Inches(0.11), Inches(0.11))
+        m.fill.solid(); m.fill.fore_color.rgb = color
+        m.line.fill.background(); m.shadow.inherit = False
+        lx = x1 + 0.2
+    else:
+        c = s.shapes.add_connector(2, Inches(x1), Inches(y), Inches(X[dst]), Inches(y))
+        c.line.color.rgb = color; c.line.width = Pt(1.5)
+        # Direction is the content on this slide, so the arrowhead is worth the raw XML that
+        # python-pptx does not wrap. Appended last: a:tailEnd is the final child of a:ln.
+        tail = c.line._get_or_add_ln().makeelement(
+            qn("a:tailEnd"), {"type": "triangle", "w": "med", "len": "med"})
+        c.line._get_or_add_ln().append(tail)
+        lx = min(x1, X[dst]) + 0.1
+    tb(s, f"{n}   {text}", lx, y - 0.16 * nlines - 0.1, 12.6 - lx, 0.16 * nlines, 9.5,
+       color=BODY)
+
+
+step(1, "harness", None, "flock the run lock — one run at a time on this machine, because events are correlated by TIME")
+step(2, "harness", "Cortex", "start the event tap:   curl -sN :47601/v1/events  →  out/events/stream.sse   (confirmed with pgrep)")
+step(3, "harness", None, "fresh workspace · baseline pytest must FAIL · empty CLAUDE_CONFIG_DIR, skill assembled per arm")
+step(4, "harness", "claude", "t0 ← now.   spawn   claude -p --output-format stream-json --allowedTools …\n"
+                             "env only:  HTTPS_PROXY=http://127.0.0.1:47600 · NODE_EXTRA_CA_CERTS · CLAUDE_CONFIG_DIR · --model")
+step(5, "claude", "Cortex", "HTTP CONNECT on loopback → tls_bridge terminates TLS → the inference-parser sees the request")
+step(6, "Cortex", "LiteLLM", "real HTTPS outbound — Cortex holds the upstream\n"
+                             "connection, and emits request + response events")
+step(7, "Cortex", "harness", "events arrive DURING the run, on the connection opened in step 2 — the store is in-memory with a 30-min TTL,\n"
+                             "so the file on disk is the only durable record.    Steps 5–7 repeat: one task is SEVERAL LLM calls")
+step(8, "claude", "harness", "child exits → t1 ← now, wait 4 s.   stdout NDJSON read from the pipe: tool_use, Skill calls, result")
+step(9, "harness", None, "install the hidden verdict/ ONLY NOW · test files must be byte-identical · pytest → passed")
+step(10, "harness", None, "join the two streams by TIME WINDOW + host:  phase==response, t0 ≤ at ≤ t1  →  tokens · one NDJSON row",
+     color=WARN)
+
+tb(s, "Why a time window and not an id: Cortex labels events with its own sessionId / requestId for the proxied connection, and nothing the child\n"
+      "prints references them. Hence step 1 — an unlocked second run lands in the same window, which is how a smoke test once absorbed a sweep's\n"
+      "events. Hence finding 5 too: a subagent inherits HTTPS_PROXY, so its calls fall inside the window and cannot be separated out.",
+   0.7, 6.68, 11.2, 0.6, 10, color=MUTED, spacing=1)
+
+# ─────────────────────────────────────────────────────────── 7. rationale
 s = prs.slides.add_slide(BLANK); bg(s, PAPER)
 slide_title(s, "Why this shape", "rationale")
 rows = [["decision", "rationale — each one was measured, not assumed"],
